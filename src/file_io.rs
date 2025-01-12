@@ -87,7 +87,7 @@ pub fn read_data(f: &mut BufReader<File>, file_info: WavInfo, start_pos: f32, du
                 let idx = i*sample_size*channels;
                 for j in 0..channels {
                     let ch_offset = j*sample_size + idx;
-                    output[j][i] = (((data[ch_offset + 2] as i32) << 24 | (data[ch_offset + 1] as i32) << 16) >> 16) as f32 / 0xFFFF as f32;
+                    output[j][i] = (((data[ch_offset + 1] as i32) << 24 | (data[ch_offset] as i32) << 16) >> 16) as f32 / 0xFFFF as f32;
                 }
             }
         },
@@ -168,26 +168,4 @@ pub fn buf_to_int(buf: &[u8], bytes: usize) -> u32 {
         out |= (buf[i-1] as u32) << ((i-1)*8);
     }
     out
-}
-
-#[derive(Debug)]
-struct BitDepthError;
-
-
-#[derive(Debug)]
-struct InvalidInputError;
-
-impl error::Error for BitDepthError {}
-impl error::Error for InvalidInputError {}
-
-impl fmt::Display for BitDepthError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Invalid bit depth!")
-    }
-}
-
-impl fmt::Display for InvalidInputError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Invalid Input!")
-    }
 }
