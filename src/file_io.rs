@@ -77,7 +77,7 @@ pub fn read_data(f: &mut BufReader<File>, file_info: WavInfo, start_pos: f32, du
     let sample_size = (file_info.bit_depth/8) as usize;
     let channels = file_info.channels as usize;
     let mut samples_per_channel = (duration * file_info.sample_rate as f32) as usize;
-    let mut total_samples =  samples_per_channel * channels;
+    let total_samples =  samples_per_channel * channels;
 
     f.seek(SeekFrom::Start(file_info.chunks.get("data".into()).unwrap().0)).unwrap();
     //skip to start_pos in the file

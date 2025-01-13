@@ -1,11 +1,13 @@
 mod file_io;
 mod audio;
+mod img_generator;
 
 use crate::file_io::*;
 use crate::audio::*;
+use crate::img_generator::*;
 
 use std::fs::File;
-use std::io::{stdin, Write, BufReader};
+use std::io::{stdin, BufReader};
 use cpal::{traits::{DeviceTrait, HostTrait}, Data, Device, Host, OutputCallbackInfo, SampleRate, StreamConfig};
 
 fn main() -> std::io::Result<()> {
@@ -13,54 +15,32 @@ fn main() -> std::io::Result<()> {
     let mut reader = BufReader::new(f);
     
     let file_info = file_io::read_wav_meta(&mut reader);
+    let file_sample_rate = file_info.sample_rate;
     println!("{}", file_info);
     println!("{:?}", file_info.chunks);
 
-    let signal = read_data(&mut reader, file_info, 0., 1.).unwrap();
-    let mut original_signal = SignalPlayer::new(signal, 48000, 2);
+    let signal = read_data(&mut reader, file_info, 0., 1200.).unwrap();
+    let original_signal = SignalPlayer::new(signal, file_sample_rate, 2);
 
+    //let original_signal = SignalPlayer::new(vec![generate_signal(&vec![FreqData::new(250., 0.3, 0.), FreqData::new(700., 0.3, 0.)], 48000, 1.)], 48000, 1);
+    //let transform = original_signal.do_fourier_transform();
+    //println!("{:?}", transform.into_iter().filter(|x| x.amplitude > 0.).collect::<Vec<FreqData>>());
     //let transform = original_signal.do_fourier_transform();
     //for t in &transform[0] {
     //    if t.amplitude > 0.01 {
     //        println!("{:?}", t);
     //    }
     //}
-    //
+
+
     //let new_signal = generate_multichannel_signal(&transform, original_signal.sample_rate as usize, 1.);
     //let mut signal_player = SignalPlayer::new(new_signal, 48000, 2);
-    //
-    //let mut f = File::create("./res/test.csv").unwrap();
-    //for i in 0..original_signal.samples[0].len() {
-    //    f.write(format!("{},{}\n", original_signal.samples[0][i], signal_player.samples[0][i]).as_bytes()).unwrap();
-    //}
     
-    let stdft: Vec<Vec<Vec<FreqData>>> = original_signal.do_short_time_fourier_transform(0.01, 0.0);
-    println!("{}, {}, {}", stdft.len(), stdft[0].len(), stdft[0][0].len());
-    let mut max = 0.;
-    for i in 0..stdft.len() {
-        for j in 0..stdft[i].len() {
-            for k in 0..stdft[i][j].len() {
-                if stdft[i][j][k].amplitude > max {
-                    max = stdft[i][j][k].amplitude;
-                }
-            }
-        }
-    }
+    let stdft: ShortTimeDftData = original_signal.do_short_time_fourier_transform(0.05, 0.0);
+    println!("{}", stdft);
 
-    let imgx = stdft[0].len() * 9;
-    let imgy = stdft[0][0].len();
-    
-    println!("{}", (1. / max) * 256.);
-    let mut imgbuf = image::ImageBuffer::new(imgx as u32, imgy as u32);
+    generate_img("./res/test.png", 1200, 800, stdft, true).unwrap();
 
-    for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-        let r = stdft[0][x as usize % 9][y as usize].amplitude * 2560000.;
-        *pixel = image::Rgb([r as u8, 0 as u8, 0 as u8]);
-    }
-    imgbuf.save("../test.png").unwrap();
-
-
-    println!("done");
     panic!("");
 
     let host: Host = cpal::default_host();
