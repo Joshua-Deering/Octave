@@ -1,6 +1,7 @@
-use std::{f32::consts::{PI, TAU}, ops::{AddAssign, Div, DivAssign, Mul}, thread};
+use std::{f32::consts::{PI, TAU}, fmt, mem::size_of_val, ops::{AddAssign, Div, DivAssign, Mul}, thread};
 use fastapprox::fast;
 use cpal::Data;
+
 
 pub fn generate_multichannel_signal(freq_data: &Vec<Vec<FreqData>>, sample_rate: usize, duration: f32) -> Vec<Vec<f32>> {
     let mut output = vec![vec![]; freq_data.len()];
@@ -23,6 +24,27 @@ pub fn generate_signal(freq_data: &Vec<FreqData>, sample_rate: usize, duration: 
     samples
 }
 
+pub struct ShortTimeDftData {
+    pub dft_data: Vec<Vec<Vec<FreqData>>>,
+    pub num_channels: u32,
+    pub num_dfts: u32,
+    pub num_freq: u32,
+    pub sample_rate: u32,
+    pub data_size: usize,
+}
+
+impl ShortTimeDftData {
+    pub fn new(dft_data: Vec<Vec<Vec<FreqData>>>, num_channels: u32, num_dfts: u32, num_freq: u32, sample_rate: u32) -> Self {
+        let data_size = (size_of_val(&dft_data[0][0][0]) as u32 * num_channels * num_dfts * num_freq) as usize + (size_of::<u32>() * 4);
+        Self { dft_data, num_channels, num_dfts, num_freq, sample_rate, data_size }
+    }
+}
+
+impl fmt::Display for ShortTimeDftData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(format!("Short Time DFT Data:\nSample Rate: {} Hz\n# Channels: {}\n# DFTs: {}\n# Frequencies: {}\nTotal Data Size: {} bytes", self.sample_rate, self.num_channels, self.num_dfts, self.num_freq, self.data_size).as_str())
+    }
+}
 
 pub struct SignalPlayer {
     pub samples: Vec<Vec<f32>>,
@@ -32,6 +54,7 @@ pub struct SignalPlayer {
     pos: usize,
 }
 
+#[allow(unused)]
 impl SignalPlayer {
     pub fn new(samples: Vec<Vec<f32>>, sample_rate: u32, channels: usize) -> Self {
         let duration = samples.len() as f32 / sample_rate as f32;
@@ -57,18 +80,21 @@ impl SignalPlayer {
         self.pos += data.len() / self.channels;
     }
 
-    pub fn do_short_time_fourier_transform(&self, window_size: f32, overlap: f32) -> Vec<Vec<Vec<FreqData>>> {
-        let mut out = vec![vec![]; self.channels];
+    pub fn do_short_time_fourier_transform(&self, window_size: f32, overlap: f32) -> ShortTimeDftData {
+        let mut dft_data = vec![vec![]; self.channels];
         for i in 0..self.channels {
-            out[i] = do_short_time_fourier_transform(&self.samples[i], self.sample_rate, self.duration, window_size, overlap);
+            dft_data[i] = do_short_time_fourier_transform(&self.samples[i], self.sample_rate, window_size, overlap);
         }
-        out
+        let ch = dft_data.len() as u32;
+        let dfts = dft_data[0].len() as u32;
+        let freqs = dft_data[0][0].len() as u32;
+        ShortTimeDftData::new(dft_data, ch, dfts, freqs, self.sample_rate)
     }
     
     pub fn do_fourier_transform(&self) -> Vec<Vec<FreqData>> {
         let mut out = vec![vec![]; self.channels];
         for i in 0..self.channels {
-            out[i] = do_fourier_transform(&self.samples[i], self.sample_rate, self.duration);
+            out[i] = do_fourier_transform(&self.samples[i], self.sample_rate);
         }
         out
     }
@@ -77,31 +103,35 @@ impl SignalPlayer {
         if channel > self.channels {
             return vec![];
         }
-        do_fourier_transform(&self.samples[channel-1], self.sample_rate, self.duration)
+        do_fourier_transform(&self.samples[channel-1], self.sample_rate)
     }
 }
 
-fn do_short_time_fourier_transform(samples: &Vec<f32>, sample_rate: u32, duration: f32, window_size: f32, overlap: f32) -> Vec<Vec<FreqData>> {
+
+fn do_short_time_fourier_transform(samples: &Vec<f32>, sample_rate: u32, window_size: f32, overlap: f32) -> Vec<Vec<FreqData>> {
     let samples_per_window = (window_size * sample_rate as f32) as usize;
     let overlap_size = (samples_per_window as f32 * overlap) as usize;
     let step_size = samples_per_window - overlap_size;
     let num_windows = samples.len() / (samples_per_window - overlap_size);
-    let duration_per_window = duration / num_windows as f32;
     
-    let mut out: Vec<Vec<FreqData>> = vec![vec![]; num_windows - 1];
+    let mut out: Vec<Vec<FreqData>> = vec![vec![]; num_windows];
     let mut window_idx = 0;
     let mut i: usize = 0;
     while i + samples_per_window < samples.len() {
-        out[window_idx] = do_fourier_transform_slice(&samples[i..i+samples_per_window], sample_rate, duration_per_window);
+        out[window_idx] = do_fourier_transform_slice(&samples[i..i+samples_per_window], sample_rate);
         window_idx += 1;
         i += step_size;
+    }
+    //account for the fact that the audio may not have been perfectly divisible by the window size
+    if i < samples.len() && window_idx < out.len() {
+        out[window_idx] = do_fourier_transform_slice(&samples[i..], sample_rate);
     }
 
     out
 }
 
 
-fn do_fourier_transform_slice(samples: &[f32], sample_rate: u32, duration: f32) -> Vec<FreqData> {
+fn do_fourier_transform_slice(samples: &[f32], sample_rate: u32) -> Vec<FreqData> {
     let num_frequencies = samples.len() / 2 + 1;
     let mut frequency_data = vec![FreqData::ZERO; num_frequencies];
     let frequency_step = sample_rate as f32 / samples.len() as f32;
@@ -121,8 +151,9 @@ fn do_fourier_transform_slice(samples: &[f32], sample_rate: u32, duration: f32) 
                     let is_nyquist_or_zero = (freq_index == num_frequencies-1 && samples.len() % 2 == 0) || freq_index == 0;
 
                     let sample_center = sum / samples.len();
+                    let ampl = if is_nyquist_or_zero {sample_center.magnitude()} else {sample_center.magnitude() * 2.};
                     frequencies[freq_index - idx*chunk_size].frequency = (freq_index as f32 * frequency_step) as f32;
-                    frequencies[freq_index - idx*chunk_size].amplitude = if is_nyquist_or_zero {sample_center.magnitude()} else {sample_center.magnitude() * 2.};
+                    frequencies[freq_index - idx*chunk_size].amplitude = if ampl > 1e-5 {ampl} else {0.};
                     frequencies[freq_index - idx*chunk_size].phase = -f32::atan2(sample_center.y, sample_center.x);
                 }
             });
@@ -132,7 +163,7 @@ fn do_fourier_transform_slice(samples: &[f32], sample_rate: u32, duration: f32) 
     frequency_data
 }
 
-fn do_fourier_transform(samples: &Vec<f32>, sample_rate: u32, duration: f32) -> Vec<FreqData> {
+fn do_fourier_transform(samples: &Vec<f32>, sample_rate: u32) -> Vec<FreqData> {
     let num_frequencies = samples.len() / 2 + 1;
     let mut frequency_data = vec![FreqData::ZERO; num_frequencies];
     let frequency_step = sample_rate as f32 / samples.len() as f32;
@@ -152,8 +183,9 @@ fn do_fourier_transform(samples: &Vec<f32>, sample_rate: u32, duration: f32) -> 
                     let is_nyquist_or_zero = (freq_index == num_frequencies-1 && samples.len() % 2 == 0) || freq_index == 0;
 
                     let sample_center = sum / samples.len();
+                    let ampl = if is_nyquist_or_zero {sample_center.magnitude()} else {sample_center.magnitude() * 2.};
                     frequencies[freq_index - idx*chunk_size].frequency = (freq_index as f32 * frequency_step) as f32;
-                    frequencies[freq_index - idx*chunk_size].amplitude = if is_nyquist_or_zero {sample_center.magnitude()} else {sample_center.magnitude() * 2.};
+                    frequencies[freq_index - idx*chunk_size].amplitude = if ampl > 1e-5 {ampl} else {0.};
                     frequencies[freq_index - idx*chunk_size].phase = -f32::atan2(sample_center.y, sample_center.x);
                 }
             });
@@ -172,9 +204,6 @@ pub struct FreqData {
 
 impl FreqData {
     const ZERO: Self = FreqData { frequency: 0., amplitude: 0., phase: 0. };
-    pub fn new(frequency: f32, amplitude: f32, phase: f32) -> Self {
-        Self { frequency, amplitude, phase }
-    }
 }
 
 struct Vec2 {
