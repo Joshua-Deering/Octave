@@ -1,9 +1,7 @@
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, ErrorKind, Read, Seek, SeekFrom};
 use std::collections::HashMap;
 use std::fmt;
-use std::error;
-#[allow(unused)]
 
 pub struct WavInfo {
     pub sample_type: u8,
@@ -34,7 +32,11 @@ impl WavInfo {
 
 impl fmt::Display for WavInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(format!("Sample rate: {}, Bit depth: {}, Channels: {}, File size: {}", self.sample_rate, self.bit_depth, self.channels, self.file_size).as_str())
+        let sample_type = match self.sample_type {
+            1 => "PCM",
+            _ => "Unsupported"
+        };
+        f.write_str(format!("Wav Info:\nSample Type: {}\nSample rate: {} Hz\nSample size: {} bit\nBlock Size: {} bytes\nData Rate: {} bytes/sec\nChannels: {}\nFile size: {} bytes", sample_type, self.sample_rate, self.bit_depth, self.data_block_size, self.data_rate, self.channels, self.file_size).as_str())
     }
 }
 
@@ -51,9 +53,14 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     let _data_block_size = read_uint(f, 2); // are not used since WavInfo::new calculates these
     let bit_depth = read_uint(f, 2);
 
+    //non-PCM sample formats have not yet been implemented
+    if fmt_code != 1 {
+        panic!("Unsupported wav sample format");
+    }
+
     f.seek(SeekFrom::Start(0)).unwrap();
-    let mut chunks: HashMap<String, (u64, u32)> = HashMap::new();
     f.seek_relative(12).unwrap(); //skip 'RIFF' and 'WAVE' tags
+    let mut chunks: HashMap<String, (u64, u32)> = HashMap::new();
 
     while f.stream_position().unwrap() < f_size as u64 {
         let title = read_str(f, 4);
@@ -69,15 +76,32 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
 pub fn read_data(f: &mut BufReader<File>, file_info: WavInfo, start_pos: f32, duration: f32, ) -> Option<Vec<Vec<f32>>> {
     let sample_size = (file_info.bit_depth/8) as usize;
     let channels = file_info.channels as usize;
-    let samples_per_channel = (duration * file_info.sample_rate as f32) as usize;
-    let total_samples =  samples_per_channel * channels;
+    let mut samples_per_channel = (duration * file_info.sample_rate as f32) as usize;
+    let mut total_samples =  samples_per_channel * channels;
 
     f.seek(SeekFrom::Start(file_info.chunks.get("data".into()).unwrap().0)).unwrap();
     //skip to start_pos in the file
     f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64).unwrap();
 
     let mut data = vec![0; total_samples * sample_size];
-    f.read_exact(&mut data).unwrap();
+    
+    match f.read_exact(&mut data) {
+        Err(err) => {
+            match err.kind() {
+                ErrorKind::UnexpectedEof => {
+                    f.seek(SeekFrom::Start(file_info.chunks.get("data".into()).unwrap().0)).unwrap();
+                    //skip to start_pos in the file
+                    f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64).unwrap();
+
+                    data = vec![];
+                    f.read_to_end(&mut data).unwrap();
+                    samples_per_channel = data.len() / channels / sample_size;
+                },
+                _ => panic!("Unexpected error while reading file: {}", err)
+            }
+        },
+        Ok(()) => (),
+    }
 
     let mut output = vec![vec![0.; samples_per_channel]; channels];
     
