@@ -1,57 +1,87 @@
-use fastapprox::fast::log2;
-use image::{RgbImage, Rgb};
+use image::{Pixel, Rgb, RgbImage};
 
 use crate::ShortTimeDftData;
 
-pub fn generate_img(target_dir: &str, imgx: u32, imgy: u32, stdft: ShortTimeDftData, is_log_scale: bool) -> Result<(), image::ImageError> {
-    let bottom_freq_loc = (((imgy + 1) as f32 / log2(stdft.sample_rate as f32 / 2.)) * log2(128.)) as u32;
-    let y_scale = if is_log_scale {(imgy - 1 + bottom_freq_loc) as f32 / log2(stdft.sample_rate as f32 / 2.)} else {imgy as f32 / (stdft.sample_rate as f32 / 2.)};
+pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDftData, is_log_scale: bool) -> Result<(), image::ImageError> {
+    let bottom_freq_loc = (((imgy + 1) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)) * f32::log2(128.)) as u32;
+    let y_scale = if is_log_scale {(imgy - 1 + bottom_freq_loc) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)} else {(imgy as f32 - 1.) / (stdft.sample_rate as f32 / 2.)};
     let get_px_y = | f: f32 | -> u32 {
         if is_log_scale {
-            (y_scale * log2(f)) as u32 - bottom_freq_loc
+            let n = y_scale * f32::log2(f);
+            if (n - bottom_freq_loc as f32) <= 0. {
+                return 0;
+            }
+            n as u32 - bottom_freq_loc
         } else {
             (y_scale * f) as u32
         }
     };
-    //TODO fix so that if this is < 0, it does something useful
-    let x_step = imgx / stdft.num_dfts;
-    let mut px_x = 0;
-    let mut next_px_y = 0;
+
+    let x_step = imgx as f32 / stdft.num_dfts as f32;
+    let x_step_rounded = x_step.round() as usize;
+    let mut px_x: f32 = 0.;
 
     let max_amp = find_max_amplitude(&stdft);
 
     let mut imgbuf = RgbImage::new(imgx, imgy);
-    for i in 0..stdft.num_dfts {
-        for j in 0..stdft.num_freq-1 {
-            let cur_freq = &stdft.dft_data[0][i as usize][j as usize];
-            if cur_freq.frequency <= 27. {
-                continue;
+    let mut written_pixels = vec![vec![false; imgx as usize]; imgy as usize];
+
+    if x_step < 1. {
+        for i in 0..stdft.num_dfts as usize {
+            for j in 0..stdft.num_freq as usize - 1 {
+                let cur_freq = &stdft.dft_data[0][i][j];
+
+                let px_y = imgy - (get_px_y(stdft.dft_data[0][i][j].frequency) + 1);
+                let cur_x = px_x.round() as u32;
+                if cur_x as usize >= written_pixels[0].len() || px_y as usize >= written_pixels.len() {
+                    continue;
+                }
+                if written_pixels[px_y as usize][cur_x as usize] {
+                    let mut px = Rgb(rgb_from_range(cur_freq.amplitude, max_amp));
+                    px.blend(&imgbuf.get_pixel(cur_x, px_y).to_rgb());
+
+                    imgbuf.put_pixel(cur_x, px_y, px);
+                } else {
+                    imgbuf.put_pixel(cur_x, px_y, Rgb(rgb_from_range(cur_freq.amplitude, max_amp)));
+                    written_pixels[px_y as usize][cur_x as usize] = true;
+                }
             }
-            let px_y = next_px_y;
-            next_px_y = get_px_y(stdft.dft_data[0][i as usize][j as usize + 1].frequency);
-            if next_px_y > px_y + 1 {
-                for y in 0..next_px_y-px_y {
-                    for i in 0..x_step {
-                        imgbuf.put_pixel(px_x + i, imgy - (px_y + y + 1), Rgb(rgb_from_range(cur_freq.amplitude, max_amp)));
+            px_x += x_step;
+        }
+    } else {
+        for i in 0..stdft.num_dfts as usize {
+            for j in 0..stdft.num_freq as usize {
+                let cur_freq = &stdft.dft_data[0][i][j];
+
+                let px_y = imgy - (get_px_y(stdft.dft_data[0][i][j].frequency) + 1);
+                for i in 0..x_step_rounded {
+                    let cur_x = (px_x + i as f32).round() as u32;
+                    if written_pixels[px_y as usize][cur_x as usize] {
+                        let mut px = Rgb(rgb_from_range(cur_freq.amplitude, max_amp));
+                        px.blend(&imgbuf.get_pixel(cur_x, px_y).to_rgb());
+
+                        imgbuf.put_pixel(cur_x, px_y, px);
+                    } else {
+                        imgbuf.put_pixel(cur_x, px_y, Rgb(rgb_from_range(cur_freq.amplitude, max_amp)));
+                        written_pixels[px_y as usize][cur_x as usize] = true;
                     }
                 }
-            } else {
-                for i in 0..x_step {
-                    imgbuf.put_pixel(px_x + i, imgy - (px_y + 1), Rgb(rgb_from_range(cur_freq.amplitude, max_amp)));
-                }
             }
+            px_x += x_step;
         }
-        px_x += x_step;
     }
 
-    ////draw lines at powers of 2 starting from 32
-    //for i in 5..15 {
-    //    let freq = u32::pow(2, i);
-    //    let y = get_px_y(freq as f32);
-    //    for x in 0..imgx {
-    //        imgbuf.put_pixel(x, imgy - 1 - y, Rgb([255, 255, 255]));
-    //    }
-    //}
+    //fill in the undrawn pixels on y-axis
+    let mut last_col = imgbuf.get_pixel(0, imgy-1).clone();
+    for x in 0..imgx as usize {
+        for y in (0..imgy as usize).rev() {
+            if written_pixels[y][x] {
+                last_col = imgbuf.get_pixel(x as u32, y as u32).clone();
+                continue;
+            }
+            imgbuf.put_pixel(x as u32, y as u32, last_col);
+        }
+    }
 
     imgbuf.save(target_dir)
 }
