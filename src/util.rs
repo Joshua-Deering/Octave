@@ -9,6 +9,24 @@ pub fn query_directory(dir: &str) -> impl Iterator<Item = String> {
         entries.into_iter().map(|e| e.to_string_lossy().to_string())
 }
 
+pub fn hue_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
+    let c = v*s;
+    let h = h/60.;
+    let x = c * (1. - f32::abs(h % 2. - 1.));
+    let m = v - c;
+    
+    let rgb1: (f32, f32, f32);
+
+    if h <= 1. {rgb1 = (c, x, 0.);}
+    else if h <= 2. {rgb1 = (x, c, 0.);}
+    else if h <= 3. {rgb1 = (0., c, x);}
+    else if h <= 4. {rgb1 = (0., x, c);}
+    else if h <= 5. {rgb1 = (x, 0., c);}
+    else {rgb1 = (c, 0., x);}
+
+    [((rgb1.0 + m) * 255.) as u8, ((rgb1.1 + m) * 255.) as u8, ((rgb1.2 + m) * 255.) as u8]
+}
+
 pub fn read_stdin_bool() -> bool {
     let mut inp = String::new();
     loop {

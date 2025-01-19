@@ -71,8 +71,8 @@ pub fn do_short_time_fourier_transform(samples: &Vec<f32>, sample_rate: u32, win
     //    out[window_idx] = do_fourier_transform_slice(&samples[i..], sample_rate, window_func);
     //}
 
-    //remove the empty dft at the end
-    if out[out.len()-1].len() == 0 {
+    //remove the empty dft(s) at the end
+    while out[out.len()-1].len() == 0 {
         out.pop();
     }
 
@@ -162,7 +162,7 @@ pub enum WindowFunction {
 impl WindowFunction {
     pub fn from_str(str: &str) -> Option<Self> {
         match str.to_lowercase().as_str() {
-            "none" => Some(WindowFunction::Square),
+            "square" => Some(WindowFunction::Square),
             "bellcurve" => Some(WindowFunction::BellCurve),
             _ => None
         }

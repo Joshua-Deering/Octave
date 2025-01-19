@@ -199,6 +199,7 @@ fn create_spectrogram(dir: &str) {
     let mut dest_file = String::new();
     stdin().read_line(&mut dest_file).expect("Failed to read input");
 
+    println!("Reading Data from file...");
     let stdft = read_stdft_from_file(("./res/stdfts/".to_string() + dir).as_str());
     
     println!("Generating image...");

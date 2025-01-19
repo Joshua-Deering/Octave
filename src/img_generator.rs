@@ -1,6 +1,6 @@
 use image::{Pixel, Rgb, RgbImage};
 
-use crate::ShortTimeDftData;
+use crate::{hue_to_rgb, ShortTimeDftData};
 
 pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDftData, is_log_scale: bool) -> Result<(), image::ImageError> {
     let bottom_freq_loc = (((imgy + 1) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)) * f32::log2(128.)) as u32;
@@ -86,6 +86,7 @@ pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDf
     imgbuf.save(target_dir)
 }
 
+
 fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
     let mut max = 0.;
     for ch in &stdft.dft_data {
@@ -102,9 +103,7 @@ fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
 
 fn rgb_from_range(amplitude: f32, max_amplitude: f32) -> [u8; 3] {
     let amp_scaled = amplitude / max_amplitude;
-    let col_val = (amp_scaled * 255. * 3.) as u32; //3*256 bc 256 for each color channel
-    let r = if col_val > 255 {255} else {col_val as u8};
-    let g = if r < 255 {0} else {(col_val % 256) as u8};
-    let b = if g < 255 {0} else {(col_val % 512) as u8};
-    [r, g, b]
+    let col_val = (amp_scaled * 360. + 220.) % 360.;
+
+    hue_to_rgb(col_val, 0.6, (amp_scaled / 0.3) + 0.7)
 }
