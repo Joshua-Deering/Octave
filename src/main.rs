@@ -30,7 +30,7 @@ fn main() -> std::io::Result<()> {
         title: ".Wav Parser",
         exit_on_action: false,
         message: "<esc> to close",
-        ..MenuProps::default()
+        ..menu_default_with_colors()
     });
 
     menu.show();
@@ -52,7 +52,7 @@ fn do_stdft_menu() {
         MenuProps {
             title: "Choose a File:",
             message: "<esc> to close",
-            ..MenuProps::default()
+            ..menu_default_with_colors()
         }
     );
     audio_file_menu.show();
@@ -110,7 +110,7 @@ fn play_audio_menu() {
         MenuProps {
             title: "Choose a File:",
             message: "<esc> to close",
-            ..MenuProps::default()
+            ..menu_default_with_colors()
         }
     );
     audio_file_menu.show();
@@ -180,7 +180,7 @@ fn create_spectrogram_menu() {
         MenuProps {
             title: "Choose a File:",
             message: "<esc> to close",
-            ..MenuProps::default()
+            ..menu_default_with_colors()
         }
     );
     stdft_file_menu.show();
@@ -206,4 +206,15 @@ fn create_spectrogram(dir: &str) {
     generate_img(format!("./res/spectrograms/{}.png", dest_file.trim()), imgx, imgy, stdft, is_log_scale).expect("Failed to save image!");
     println!("Done!");
     thread::sleep(Duration::from_millis(500));
+}
+
+fn menu_default_with_colors() -> MenuProps<'static> {
+    MenuProps {
+        bg_color: 248,
+        fg_color: 19,
+        msg_color: Some(244),
+        title_color: Some(17),
+        selected_color: Some(21),
+        ..MenuProps::default()
+    }
 }
