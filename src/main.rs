@@ -1,22 +1,25 @@
-mod file_io;
 mod audio;
+mod file_io;
 mod img_generator;
 mod players;
 mod util;
 
+use crate::audio::*;
 use crate::file_io::*;
 use crate::players::*;
-use crate::audio::*;
 use crate::util::*;
 
 use std::fs::File;
-use std::io::{BufReader, stdin};
+use std::io::{stdin, BufReader};
 use std::sync::{Arc, Mutex};
-use std::{thread, thread::sleep};
 use std::time::Duration;
+use std::{thread, thread::sleep};
 
-use cpal::{traits::{DeviceTrait, HostTrait, StreamTrait}, Data, Device, Host, OutputCallbackInfo, SampleRate, StreamConfig};
 use console_menu::{Menu, MenuOption, MenuProps};
+use cpal::{
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+    Data, Device, Host, OutputCallbackInfo, SampleRate, StreamConfig,
+};
 use img_generator::generate_img;
 
 fn main() -> std::io::Result<()> {
@@ -26,12 +29,15 @@ fn main() -> std::io::Result<()> {
         MenuOption::new("Create Spectrogram", || create_spectrogram_menu()),
     ];
 
-    let mut menu = Menu::new(menu_options, MenuProps {
-        title: ".Wav Parser",
-        exit_on_action: false,
-        message: "<esc> to close",
-        ..menu_default_with_colors()
-    });
+    let mut menu = Menu::new(
+        menu_options,
+        MenuProps {
+            title: ".Wav Parser",
+            exit_on_action: false,
+            message: "<esc> to close",
+            ..menu_default_with_colors()
+        },
+    );
 
     menu.show();
 
@@ -39,12 +45,13 @@ fn main() -> std::io::Result<()> {
 }
 
 fn do_stdft_menu() {
-
     let files = query_directory("./res/audio");
 
     let mut menu_options: Vec<MenuOption> = vec![];
     for file in files {
-        menu_options.push(MenuOption::new(file.clone().as_str(), move || do_stdft(&file)));
+        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
+            do_stdft(&file)
+        }));
     }
 
     let mut audio_file_menu = Menu::new(
@@ -53,10 +60,9 @@ fn do_stdft_menu() {
             title: "Choose a File:",
             message: "<esc> to close",
             ..menu_default_with_colors()
-        }
+        },
     );
     audio_file_menu.show();
-    
 }
 
 fn do_stdft(file_choice: &str) {
@@ -76,7 +82,6 @@ fn do_stdft(file_choice: &str) {
     println!("Enter the filename for the resulting Short-Time DFT (without the extension)");
     let mut dest_file = String::new();
     stdin().read_line(&mut dest_file).unwrap();
-    
 
     let f = File::open(format!("./res/audio/{}", file_choice)).expect("Failed to open file!");
     let mut reader = BufReader::new(f);
@@ -102,7 +107,9 @@ fn play_audio_menu() {
 
     let mut menu_options: Vec<MenuOption> = vec![];
     for file in files {
-        menu_options.push(MenuOption::new(file.clone().as_str(), move || play_audio(&file)));
+        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
+            play_audio(&file)
+        }));
     }
 
     let mut audio_file_menu = Menu::new(
@@ -111,7 +118,7 @@ fn play_audio_menu() {
             title: "Choose a File:",
             message: "<esc> to close",
             ..menu_default_with_colors()
-        }
+        },
     );
     audio_file_menu.show();
 }
@@ -121,23 +128,33 @@ fn play_audio(file_path: &str) {
     let file_player = Arc::new(Mutex::new(FilePlayer::new(file_path.into())));
 
     let host: Host = cpal::default_host();
-    let device: Device = host.default_output_device().expect("No audio output device available!");
+    let device: Device = host
+        .default_output_device()
+        .expect("No audio output device available!");
 
-    let mut supported_stream_range = device.supported_output_configs().expect("Error while querying output configs!");
-    let supported_config: StreamConfig = supported_stream_range.find(|&e| e.max_sample_rate() == SampleRate(48000)).expect("No supported configs!").with_sample_rate(SampleRate(48000)).config();
+    let mut supported_stream_range = device
+        .supported_output_configs()
+        .expect("Error while querying output configs!");
+    let supported_config: StreamConfig = supported_stream_range
+        .find(|&e| e.max_sample_rate() == SampleRate(48000))
+        .expect("No supported configs!")
+        .with_sample_rate(SampleRate(48000))
+        .config();
 
     let file_player_clone = Arc::clone(&file_player);
-    let stream = device.build_output_stream_raw(
-        &supported_config, 
-        cpal::SampleFormat::F32,
-        move |data: &mut Data, _: &OutputCallbackInfo| {
-            file_player_clone.lock().unwrap().next_chunk(data);
-        },
-        move |_err| {
-            panic!("bad things happened");
-        },
-        None
-    ).unwrap();
+    let stream = device
+        .build_output_stream_raw(
+            &supported_config,
+            cpal::SampleFormat::F32,
+            move |data: &mut Data, _: &OutputCallbackInfo| {
+                file_player_clone.lock().unwrap().next_chunk(data);
+            },
+            move |_err| {
+                panic!("bad things happened");
+            },
+            None,
+        )
+        .unwrap();
     println!("Playing Audio...");
     stream.play().unwrap();
 
@@ -172,7 +189,9 @@ fn create_spectrogram_menu() {
 
     let mut menu_options: Vec<MenuOption> = vec![];
     for file in files {
-        menu_options.push(MenuOption::new(file.clone().as_str(), move || create_spectrogram(&file)));
+        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
+            create_spectrogram(&file)
+        }));
     }
 
     let mut stdft_file_menu = Menu::new(
@@ -181,7 +200,7 @@ fn create_spectrogram_menu() {
             title: "Choose a File:",
             message: "<esc> to close",
             ..menu_default_with_colors()
-        }
+        },
     );
     stdft_file_menu.show();
 }
@@ -197,13 +216,22 @@ fn create_spectrogram(dir: &str) {
     let is_log_scale = read_stdin_bool();
     println!("Enter the file name of the resulting image (without the extension)");
     let mut dest_file = String::new();
-    stdin().read_line(&mut dest_file).expect("Failed to read input");
+    stdin()
+        .read_line(&mut dest_file)
+        .expect("Failed to read input");
 
     println!("Reading Data from file...");
     let stdft = read_stdft_from_file(("./res/stdfts/".to_string() + dir).as_str());
-    
+
     println!("Generating image...");
-    generate_img(format!("./res/spectrograms/{}.png", dest_file.trim()), imgx, imgy, stdft, is_log_scale).expect("Failed to save image!");
+    generate_img(
+        format!("./res/spectrograms/{}.png", dest_file.trim()),
+        imgx,
+        imgy,
+        stdft,
+        is_log_scale,
+    )
+    .expect("Failed to save image!");
     println!("Done!");
     thread::sleep(Duration::from_millis(500));
 }

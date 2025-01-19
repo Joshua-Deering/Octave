@@ -2,10 +2,21 @@ use image::{Pixel, Rgb, RgbImage};
 
 use crate::{hue_to_rgb, ShortTimeDftData};
 
-pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDftData, is_log_scale: bool) -> Result<(), image::ImageError> {
-    let bottom_freq_loc = (((imgy + 1) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)) * f32::log2(128.)) as u32;
-    let y_scale = if is_log_scale {(imgy - 1 + bottom_freq_loc) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)} else {(imgy as f32 - 1.) / (stdft.sample_rate as f32 / 2.)};
-    let get_px_y = | f: f32 | -> u32 {
+pub fn generate_img(
+    target_dir: String,
+    imgx: u32,
+    imgy: u32,
+    stdft: ShortTimeDftData,
+    is_log_scale: bool,
+) -> Result<(), image::ImageError> {
+    let bottom_freq_loc =
+        (((imgy + 1) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)) * f32::log2(128.)) as u32;
+    let y_scale = if is_log_scale {
+        (imgy - 1 + bottom_freq_loc) as f32 / f32::log2(stdft.sample_rate as f32 / 2.)
+    } else {
+        (imgy as f32 - 1.) / (stdft.sample_rate as f32 / 2.)
+    };
+    let get_px_y = |f: f32| -> u32 {
         if is_log_scale {
             let n = y_scale * f32::log2(f);
             if (n - bottom_freq_loc as f32) <= 0. {
@@ -33,7 +44,9 @@ pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDf
 
                 let px_y = imgy - (get_px_y(stdft.dft_data[0][i][j].frequency) + 1);
                 let cur_x = px_x.round() as u32;
-                if cur_x as usize >= written_pixels[0].len() || px_y as usize >= written_pixels.len() {
+                if cur_x as usize >= written_pixels[0].len()
+                    || px_y as usize >= written_pixels.len()
+                {
                     continue;
                 }
                 if written_pixels[px_y as usize][cur_x as usize] {
@@ -42,7 +55,11 @@ pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDf
 
                     imgbuf.put_pixel(cur_x, px_y, px);
                 } else {
-                    imgbuf.put_pixel(cur_x, px_y, Rgb(rgb_from_range(cur_freq.amplitude, max_amp)));
+                    imgbuf.put_pixel(
+                        cur_x,
+                        px_y,
+                        Rgb(rgb_from_range(cur_freq.amplitude, max_amp)),
+                    );
                     written_pixels[px_y as usize][cur_x as usize] = true;
                 }
             }
@@ -62,7 +79,11 @@ pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDf
 
                         imgbuf.put_pixel(cur_x, px_y, px);
                     } else {
-                        imgbuf.put_pixel(cur_x, px_y, Rgb(rgb_from_range(cur_freq.amplitude, max_amp)));
+                        imgbuf.put_pixel(
+                            cur_x,
+                            px_y,
+                            Rgb(rgb_from_range(cur_freq.amplitude, max_amp)),
+                        );
                         written_pixels[px_y as usize][cur_x as usize] = true;
                     }
                 }
@@ -72,7 +93,7 @@ pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDf
     }
 
     //fill in the undrawn pixels on y-axis
-    let mut last_col = imgbuf.get_pixel(0, imgy-1).clone();
+    let mut last_col = imgbuf.get_pixel(0, imgy - 1).clone();
     for x in 0..imgx as usize {
         for y in (0..imgy as usize).rev() {
             if written_pixels[y][x] {
@@ -85,7 +106,6 @@ pub fn generate_img(target_dir: String, imgx: u32, imgy: u32, stdft: ShortTimeDf
 
     imgbuf.save(target_dir)
 }
-
 
 fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
     let mut max = 0.;

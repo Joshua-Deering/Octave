@@ -1,7 +1,7 @@
-use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::collections::HashMap;
 use std::fmt;
+use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 
 use crate::{FreqData, ShortTimeDftData, WindowFunction};
 
@@ -18,9 +18,17 @@ pub struct WavInfo {
 }
 
 impl WavInfo {
-    pub fn new(sample_type: u8, channels: u8, sample_rate: u32, bit_depth: u32, file_size: u32, chunks: HashMap<String, (u64, u32)>) -> Self {
+    pub fn new(
+        sample_type: u8,
+        channels: u8,
+        sample_rate: u32,
+        bit_depth: u32,
+        file_size: u32,
+        chunks: HashMap<String, (u64, u32)>,
+    ) -> Self {
         let byte_depth = bit_depth / 8;
-        let audio_duration = chunks.get("data").unwrap().1 as f32 / (byte_depth * channels as u32 * sample_rate) as f32;
+        let audio_duration = chunks.get("data").unwrap().1 as f32
+            / (byte_depth * channels as u32 * sample_rate) as f32;
         WavInfo {
             sample_type,
             channels,
@@ -30,7 +38,7 @@ impl WavInfo {
             bit_depth,
             chunks,
             file_size,
-            audio_duration
+            audio_duration,
         }
     }
 }
@@ -39,7 +47,7 @@ impl fmt::Display for WavInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let sample_type = match self.sample_type {
             1 => "PCM",
-            _ => "Unsupported"
+            _ => "Unsupported",
         };
         f.write_str(format!("Wav Info:\nSample Type: {}\nSample rate: {} Hz\nSample size: {} bit\nBlock Size: {} bytes\nData Rate: {} bytes/sec\nChannels: {}\nDuration: {} secs\nFile size: {} bytes", sample_type, self.sample_rate, self.bit_depth, self.data_block_size, self.data_rate, self.channels, self.audio_duration, self.file_size).as_str())
     }
@@ -47,7 +55,7 @@ impl fmt::Display for WavInfo {
 
 pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     f.seek(SeekFrom::Start(0)).unwrap();
-    
+
     f.seek_relative(4).unwrap();
     let f_size: u32 = read_le_uint(f, 4);
     f.seek_relative(12).unwrap();
@@ -73,98 +81,130 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
         chunks.insert(title, (f.stream_position().unwrap(), size));
         f.seek_relative(size as i64).unwrap();
     }
-    
+
     f.seek(SeekFrom::Start(0)).unwrap();
     WavInfo::new(fmt_code, channels, sample_rate, bit_depth, f_size, chunks)
 }
 
-pub fn read_data(f: &mut BufReader<File>, file_info: WavInfo, start_pos: f32, duration: f32, ) -> Option<Vec<Vec<f32>>> {
-    let sample_size = (file_info.bit_depth/8) as usize;
+pub fn read_data(
+    f: &mut BufReader<File>,
+    file_info: WavInfo,
+    start_pos: f32,
+    duration: f32,
+) -> Option<Vec<Vec<f32>>> {
+    let sample_size = (file_info.bit_depth / 8) as usize;
     let channels = file_info.channels as usize;
     let mut samples_per_channel = (duration * file_info.sample_rate as f32) as usize;
-    let total_samples =  samples_per_channel * channels;
+    let total_samples = samples_per_channel * channels;
 
-    f.seek(SeekFrom::Start(file_info.chunks.get("data".into()).unwrap().0)).unwrap();
+    f.seek(SeekFrom::Start(
+        file_info.chunks.get("data".into()).unwrap().0,
+    ))
+    .unwrap();
     //skip to start_pos in the file
-    f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64).unwrap();
+    f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64)
+        .unwrap();
 
     let mut data = vec![0; total_samples * sample_size];
-    
+
     match f.read_exact(&mut data) {
         Err(err) => {
             match err.kind() {
                 ErrorKind::UnexpectedEof => {
-                    f.seek(SeekFrom::Start(file_info.chunks.get("data".into()).unwrap().0)).unwrap();
+                    f.seek(SeekFrom::Start(
+                        file_info.chunks.get("data".into()).unwrap().0,
+                    ))
+                    .unwrap();
                     //skip to start_pos in the file
-                    f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64).unwrap();
+                    f.seek_relative(
+                        (start_pos * file_info.sample_rate as f32 * file_info.channels as f32)
+                            as i64,
+                    )
+                    .unwrap();
 
                     data = vec![];
                     f.read_to_end(&mut data).unwrap();
                     samples_per_channel = data.len() / channels / sample_size;
-                },
-                _ => panic!("Unexpected error while reading file: {}", err)
+                }
+                _ => panic!("Unexpected error while reading file: {}", err),
             }
-        },
+        }
         Ok(()) => (),
     }
 
     let mut output = vec![vec![0.; samples_per_channel]; channels];
-    
+
     match file_info.bit_depth {
         16 => {
             for i in 0..samples_per_channel {
-                let idx = i*sample_size*channels;
+                let idx = i * sample_size * channels;
                 for j in 0..channels {
-                    let ch_offset = j*sample_size + idx;
-                    output[j][i] = (((data[ch_offset + 1] as i32) << 24 | (data[ch_offset] as i32) << 16) >> 16) as f32 / 0xFFFF as f32;
+                    let ch_offset = j * sample_size + idx;
+                    output[j][i] = (((data[ch_offset + 1] as i32) << 24
+                        | (data[ch_offset] as i32) << 16)
+                        >> 16) as f32
+                        / 0xFFFF as f32;
                 }
             }
-        },
+        }
 
         24 => {
             for i in 0..samples_per_channel {
-                let idx = i*sample_size*channels;
+                let idx = i * sample_size * channels;
                 for j in 0..channels {
-                    let ch_idx = j*sample_size + idx;
-                    output[j][i] = (((data[ch_idx + 2] as i32) << 24 | (data[ch_idx + 1] as i32) << 16 | (data[ch_idx] as i32) << 8) >> 8) as f32 / 0xFFFFFF as f32;
+                    let ch_idx = j * sample_size + idx;
+                    output[j][i] = (((data[ch_idx + 2] as i32) << 24
+                        | (data[ch_idx + 1] as i32) << 16
+                        | (data[ch_idx] as i32) << 8)
+                        >> 8) as f32
+                        / 0xFFFFFF as f32;
                 }
             }
-        },
-        
+        }
+
         32 => {
             for i in 0..samples_per_channel {
-                let idx = i*sample_size*channels;
+                let idx = i * sample_size * channels;
                 for j in 0..channels {
-                    let ch_offset = j*sample_size + idx;
-                    output[j][j] = (((data[ch_offset + 3] as i32) << 24 | (data[ch_offset + 2] as i32) << 16 | (data[ch_offset + 1] as i32) << 8) | (data[ch_offset] as i32)) as f32 / (i32::MAX) as f32;
+                    let ch_offset = j * sample_size + idx;
+                    output[j][j] = (((data[ch_offset + 3] as i32) << 24
+                        | (data[ch_offset + 2] as i32) << 16
+                        | (data[ch_offset + 1] as i32) << 8)
+                        | (data[ch_offset] as i32)) as f32
+                        / (i32::MAX) as f32;
                 }
             }
-        },
+        }
 
-        _ => return None
+        _ => return None,
     }
-    
+
     Some(output)
 }
 
 pub fn write_stdft_to_file(file_dir: String, stdft: &ShortTimeDftData) {
     let mut file = BufWriter::new(File::create(file_dir.trim()).unwrap());
 
-    file.write_fmt(format_args!("{}\n", stdft.window_type.to_string())).unwrap();
+    file.write_fmt(format_args!("{}\n", stdft.window_type.to_string()))
+        .unwrap();
     file.write_all(&stdft.overlap.to_be_bytes()).unwrap();
     file.write_all(&stdft.num_channels.to_le_bytes()).unwrap();
     file.write_all(&stdft.num_dfts.to_le_bytes()).unwrap();
     file.write_all(&stdft.num_freq.to_le_bytes()).unwrap();
     file.write_all(&stdft.sample_rate.to_le_bytes()).unwrap();
     //cast to u32 to ensure data_size is written as 4 bytes, since usize can change sizes
-    file.write_all(&(stdft.data_size as u32).to_le_bytes()).unwrap();
+    file.write_all(&(stdft.data_size as u32).to_le_bytes())
+        .unwrap();
 
     for i in 0..stdft.num_channels as usize {
         for j in 0..stdft.num_dfts as usize {
             for k in 0..stdft.num_freq as usize {
-                file.write_all(&stdft.dft_data[i][j][k].frequency.to_be_bytes()).unwrap();
-                file.write_all(&stdft.dft_data[i][j][k].amplitude.to_be_bytes()).unwrap();
-                file.write_all(&stdft.dft_data[i][j][k].phase.to_be_bytes()).unwrap();
+                file.write_all(&stdft.dft_data[i][j][k].frequency.to_be_bytes())
+                    .unwrap();
+                file.write_all(&stdft.dft_data[i][j][k].amplitude.to_be_bytes())
+                    .unwrap();
+                file.write_all(&stdft.dft_data[i][j][k].phase.to_be_bytes())
+                    .unwrap();
             }
         }
     }
@@ -173,7 +213,7 @@ pub fn write_stdft_to_file(file_dir: String, stdft: &ShortTimeDftData) {
 
 pub fn read_stdft_from_file(file_dir: &str) -> ShortTimeDftData {
     let mut file = BufReader::new(File::open(file_dir).unwrap());
-    
+
     let mut window_str = String::new();
     file.read_line(&mut window_str).unwrap();
     let window_type = WindowFunction::from_str(window_str.trim()).unwrap();
@@ -187,7 +227,10 @@ pub fn read_stdft_from_file(file_dir: &str) -> ShortTimeDftData {
     let sample_rate = read_le_uint(&mut file, 4);
     let data_size = read_le_uint(&mut file, 4);
 
-    let mut dft_data = vec![vec![vec![FreqData::ZERO; num_freq as usize]; num_dfts as usize]; num_channels as usize];
+    let mut dft_data = vec![
+        vec![vec![FreqData::ZERO; num_freq as usize]; num_dfts as usize];
+        num_channels as usize
+    ];
     for i in 0..num_channels as usize {
         for j in 0..num_dfts as usize {
             let mut cur_dft_dat = vec![0 as u8; num_freq as usize * 4 * 3];
@@ -200,10 +243,23 @@ pub fn read_stdft_from_file(file_dir: &str) -> ShortTimeDftData {
         }
     }
 
-    ShortTimeDftData::new_with_size(dft_data, window_type, overlap, num_channels, num_dfts, num_freq, sample_rate, data_size as usize)
+    ShortTimeDftData::new_with_size(
+        dft_data,
+        window_type,
+        overlap,
+        num_channels,
+        num_dfts,
+        num_freq,
+        sample_rate,
+        data_size as usize,
+    )
 }
 
-pub fn read_data_interleaved_unchecked<T: Read>(f: &mut BufReader<T>, file_info: &WavInfo, data_len: usize) -> Vec<f32> {
+pub fn read_data_interleaved_unchecked<T: Read>(
+    f: &mut BufReader<T>,
+    file_info: &WavInfo,
+    data_len: usize,
+) -> Vec<f32> {
     let byte_depth = file_info.bit_depth as usize / 8;
     let mut data = vec![0; data_len * byte_depth];
 
@@ -211,33 +267,43 @@ pub fn read_data_interleaved_unchecked<T: Read>(f: &mut BufReader<T>, file_info:
         Ok(_) => (),
         Err(err) => {
             panic!("Unexpected error while reading file: {}", err)
-        },
+        }
     };
     let mut out_data = vec![0.; data_len];
-    
+
     match byte_depth {
         2 => {
             for j in 0..out_data.len() {
                 let idx = j * byte_depth;
-                out_data[j] = (((data[idx + 1] as i32) << 24 | (data[idx] as i32) << 16) >> 16) as f32 / 0xFFFF as f32;
+                out_data[j] = (((data[idx + 1] as i32) << 24 | (data[idx] as i32) << 16) >> 16)
+                    as f32
+                    / 0xFFFF as f32;
             }
-        },
+        }
 
         3 => {
             for j in 0..out_data.len() {
                 let idx = j * byte_depth;
-                out_data[j] = (((data[idx + 2] as i32) << 24 | (data[idx + 1] as i32) << 16 | (data[idx] as i32) << 8) >> 8) as f32 / 0xFFFFFF as f32;
+                out_data[j] = (((data[idx + 2] as i32) << 24
+                    | (data[idx + 1] as i32) << 16
+                    | (data[idx] as i32) << 8)
+                    >> 8) as f32
+                    / 0xFFFFFF as f32;
             }
-        },
-        
+        }
+
         4 => {
             for j in 0..out_data.len() {
                 let idx = j * byte_depth;
-                out_data[j] = (((data[idx + 3] as i32) << 24 | (data[idx + 2] as i32) << 16 | (data[idx + 1] as i32) << 8) | (data[idx] as i32)) as f32 / (i32::MAX) as f32;
+                out_data[j] = (((data[idx + 3] as i32) << 24
+                    | (data[idx + 2] as i32) << 16
+                    | (data[idx + 1] as i32) << 8)
+                    | (data[idx] as i32)) as f32
+                    / (i32::MAX) as f32;
             }
-        },
+        }
 
-        _ => panic!("Unsupported byte depth")
+        _ => panic!("Unsupported byte depth"),
     }
 
     out_data
@@ -260,8 +326,8 @@ pub fn read_le_uint(f: &mut BufReader<File>, bytes: usize) -> u32 {
 
 pub fn buf_to_int(buf: &[u8], bytes: usize) -> u32 {
     let mut out: u32 = 0;
-    for i in (1..bytes+1).rev() {
-        out |= (buf[i-1] as u32) << ((i-1)*8);
+    for i in (1..bytes + 1).rev() {
+        out |= (buf[i - 1] as u32) << ((i - 1) * 8);
     }
     out
 }
