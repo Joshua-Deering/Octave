@@ -64,14 +64,9 @@ pub fn do_short_time_fourier_transform(samples: &Vec<f32>, sample_rate: u32, win
         window_idx += 1;
         i += step_size;
     }
-    //account for the fact that the audio may not have been perfectly divisible by the window size
-    // todo: do something about this, since adding an extra, shorter dft to the end is problematic,
-    // because it means the last dft in the stdft will always have less frequencies.
-    //if i < samples.len() {
-    //    out[window_idx] = do_fourier_transform_slice(&samples[i..], sample_rate, window_func);
-    //}
 
-    //remove the empty dft(s) at the end
+    // remove the empty dft(s) at the end that are
+    // caused by the rounding of window size
     while out[out.len()-1].len() == 0 {
         out.pop();
     }

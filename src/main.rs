@@ -1,4 +1,5 @@
 mod audio;
+mod fft;
 mod file_io;
 mod img_generator;
 mod players;
