@@ -5,10 +5,11 @@ mod img_generator;
 mod players;
 mod util;
 
-use crate::audio::*;
-use crate::file_io::*;
-use crate::players::*;
-use crate::util::*;
+use util::*;
+use img_generator::generate_img;
+use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file};
+use audio::WindowFunction;
+use players::{FilePlayer, SignalPlayer};
 
 use std::fs::File;
 use std::io::{stdin, BufReader};
@@ -21,7 +22,6 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Data, Device, Host, OutputCallbackInfo, SampleRate, StreamConfig,
 };
-use img_generator::generate_img;
 
 fn main() -> std::io::Result<()> {
     let menu_options = vec![

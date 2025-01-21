@@ -3,7 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 
-use crate::{FreqData, ShortTimeDftData, WindowFunction};
+use crate::{audio::FreqData, audio::ShortTimeDftData, WindowFunction};
 
 pub struct WavInfo {
     pub sample_type: u8,

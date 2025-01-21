@@ -1,6 +1,6 @@
 use image::{Pixel, Rgb, RgbImage};
 
-use crate::{hue_to_rgb, ShortTimeDftData};
+use crate::{hue_to_rgb, audio::ShortTimeDftData};
 
 pub fn generate_img(
     target_dir: String,
@@ -123,7 +123,7 @@ fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
 
 fn rgb_from_range(amplitude: f32, max_amplitude: f32) -> [u8; 3] {
     let amp_scaled = amplitude / max_amplitude;
-    let col_val = (amp_scaled * 360. + 220.) % 360.;
+    let col_val = (amp_scaled * 360. + 250.) % 360.;
 
     hue_to_rgb(col_val, 0.6, (amp_scaled / 0.3) + 0.7)
 }
