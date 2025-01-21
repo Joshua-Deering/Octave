@@ -1,7 +1,4 @@
 # Wav Parser
-By Joshua Deering
-
----
 
 Wav Parser is a console-based app that can do various processing on Wav files. Its main purpose is for me to to a deep dive into Discrete Fourier Transforms, and to get better at writing good, fast (ideally) rust code.
 
