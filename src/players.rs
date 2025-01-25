@@ -6,12 +6,14 @@ use crate::file_io::{WavInfo, read_data_interleaved_unchecked};
 use crate::audio::{WindowFunction, ShortTimeDftData, do_short_time_fourier_transform};
 use crate::read_wav_meta;
 
+
 pub struct SignalPlayer {
     pub samples: Vec<Vec<f32>>,
     pub sample_rate: u32,
     channels: usize,
     //duration: f32,
-    //pos: usize,
+    pos: usize,
+    pub finished: bool,
 }
 
 impl SignalPlayer {
@@ -22,23 +24,10 @@ impl SignalPlayer {
             sample_rate,
             channels,
             //duration,
-            //pos: 0,
+            pos: 0,
+            finished: false,
         }
     }
-
-    //pub fn next_chunk(&mut self, data: &mut Data) {
-    //    let dat_slice = data.as_slice_mut().unwrap();
-    //    let end = self.pos + (dat_slice.len() / self.channels);
-    //    if end >= self.samples[0].len() {
-    //        return;
-    //    }
-    //    for i in self.pos..end {
-    //        for c in 0..self.channels {
-    //            dat_slice[(i - self.pos) * self.channels + c] = self.samples[c][i];
-    //        }
-    //    }
-    //    self.pos += data.len() / self.channels;
-    //}
 
     pub fn do_short_time_fourier_transform(
         &self,
@@ -71,6 +60,23 @@ impl SignalPlayer {
     }
 }
 
+impl Play for SignalPlayer {
+    fn next_chunk(&mut self, data: &mut Data) {
+        let dat_slice = data.as_slice_mut().unwrap();
+        let end = self.pos + (dat_slice.len() / self.channels);
+        if end >= self.samples[0].len() {
+            self.finished = true;
+            return;
+        }
+        for i in self.pos..end {
+            for c in 0..self.channels {
+                dat_slice[(i - self.pos) * self.channels + c] = self.samples[c][i];
+            }
+        }
+        self.pos += data.len() / self.channels;
+    }
+}
+
 pub struct FilePlayer {
     pub file_meta: WavInfo,
     pub finished: bool,
@@ -97,8 +103,10 @@ impl FilePlayer {
             end_pos,
         }
     }
+}
 
-    pub fn next_chunk(&mut self, data: &mut Data) {
+impl Play for FilePlayer {
+    fn next_chunk(&mut self, data: &mut Data) {
         let dat_slice = data.as_slice_mut().unwrap();
         if self.pos + dat_slice.len() >= self.end_pos {
             self.finished = true;
@@ -111,4 +119,8 @@ impl FilePlayer {
 
         self.pos += data.len();
     }
+}
+
+pub trait Play {
+    fn next_chunk(&mut self, data: &mut Data);
 }
