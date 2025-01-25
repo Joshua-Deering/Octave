@@ -7,9 +7,9 @@ mod util;
 
 use util::*;
 use img_generator::generate_img;
-use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file};
+use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file, WavInfo};
 use audio::WindowFunction;
-use players::{FilePlayer, SignalPlayer};
+use players::{FilePlayer, Play, SignalPlayer};
 
 use std::fs::File;
 use std::io::{stdin, BufReader};
@@ -107,9 +107,18 @@ fn play_audio_menu() {
     let files = query_directory("./res/audio");
 
     let mut menu_options: Vec<MenuOption> = vec![];
+
+    // todo: need to have some way of figuring out which sample rates i can use
+    // and which files are possible to play based on that
+    // then also provide functionality to resample files
     for file in files {
         menu_options.push(MenuOption::new(file.clone().as_str(), move || {
-            play_audio(&file)
+            let mut r = BufReader::new(File::open(format!("./res/audio/{}", &file)).unwrap());
+            let meta = read_wav_meta(&mut r);
+            match meta.sample_type {
+                1 => play_audio_direct(&file, meta),
+                _ => play_audio_stream(meta, &mut r),
+            }
         }));
     }
 
@@ -124,9 +133,9 @@ fn play_audio_menu() {
     audio_file_menu.show();
 }
 
-fn play_audio(file_path: &str) {
-    println!("Audio player starting ('exit' to stop playback and return to menu)");
-    let file_player = Arc::new(Mutex::new(FilePlayer::new(file_path.into())));
+fn play_audio_stream(file_meta: WavInfo, reader: &mut BufReader<File>) {
+    println!("Audio player starting");
+    let signal_player = Arc::new(Mutex::new(SignalPlayer::new(read_data(reader, file_meta.clone(), 0., file_meta.audio_duration).unwrap(), file_meta.sample_rate, file_meta.channels as usize)));
 
     let host: Host = cpal::default_host();
     let device: Device = host
@@ -140,6 +149,53 @@ fn play_audio(file_path: &str) {
         .find(|&e| e.max_sample_rate() == SampleRate(48000))
         .expect("No supported configs!")
         .with_sample_rate(SampleRate(48000))
+        .config();
+
+    let signal_player_clone = Arc::clone(&signal_player);
+    let stream = device
+        .build_output_stream_raw(
+            &supported_config,
+            cpal::SampleFormat::F32,
+            move |data: &mut Data, _: &OutputCallbackInfo| {
+                signal_player_clone.lock().unwrap().next_chunk(data);
+            },
+            move |_err| {
+                panic!("bad things happened");
+            },
+            None,
+        )
+        .unwrap();
+    println!("Playing Audio...");
+    stream.play().unwrap();
+
+    // keep track of whether the audio has finished playing on the current thread
+    loop {
+        if signal_player.lock().unwrap().finished == true {
+            println!("Audio playback complete!");
+
+            sleep(Duration::from_millis(500));
+            return;
+        }
+        sleep(Duration::from_millis(100));
+    }
+}
+
+fn play_audio_direct(file_path: &str, file_meta: WavInfo) {
+    println!("Audio player starting");
+    let file_player = Arc::new(Mutex::new(FilePlayer::new(file_path.into())));
+
+    let host: Host = cpal::default_host();
+    let device: Device = host
+        .default_output_device()
+        .expect("No audio output device available!");
+
+    let mut supported_stream_range = device
+        .supported_output_configs()
+        .expect("Error while querying output configs!");
+    let supported_config: StreamConfig = supported_stream_range
+        .find(|&e| e.max_sample_rate() == SampleRate(48000))
+        .expect("No supported configs!")
+        .with_sample_rate(SampleRate(file_meta.sample_rate))
         .config();
 
     let file_player_clone = Arc::clone(&file_player);
@@ -158,22 +214,6 @@ fn play_audio(file_path: &str) {
         .unwrap();
     println!("Playing Audio...");
     stream.play().unwrap();
-
-    // listen to stdin for the exit command on another thread
-    let inp_file_player = Arc::clone(&file_player);
-    thread::spawn(move || {
-        let mut inp = "".to_string();
-        loop {
-            stdin().read_line(&mut inp).unwrap();
-            if inp.trim() == "exit" {
-                inp_file_player.lock().unwrap().finished = true;
-                println!("Exiting...");
-                return;
-            }
-            inp = "".to_string();
-            sleep(Duration::from_millis(100));
-        }
-    });
 
     // keep track of whether the audio has finished playing on the current thread
     loop {
