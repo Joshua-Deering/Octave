@@ -28,6 +28,7 @@ pub fn generate_img(
         }
     };
 
+    //todo: fix problem where if this gets rounded up, gets out of bounds err
     let x_step = imgx as f32 / stdft.num_dfts as f32;
     let x_step_rounded = x_step.round() as usize;
     let mut px_x: f32 = 0.;
@@ -122,8 +123,8 @@ fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
 }
 
 fn rgb_from_range(amplitude: f32, max_amplitude: f32) -> [u8; 3] {
-    let amp_scaled = amplitude / max_amplitude;
-    let col_val = (amp_scaled * 360. + 250.) % 360.;
+    let amp_scaled = f32::powf(amplitude / max_amplitude, 0.3);
+    let col_val = (amp_scaled * 360. + 200.) % 360.;
 
-    hue_to_rgb(col_val, 0.6, (amp_scaled / 0.3) + 0.7)
+    hue_to_rgb(col_val, 0.8, 1.)
 }
