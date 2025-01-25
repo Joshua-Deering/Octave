@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 use crate::{audio::FreqData, audio::ShortTimeDftData, WindowFunction};
 
+#[derive(Clone)]
 pub struct WavInfo {
     pub sample_type: u8,
     pub channels: u8,
@@ -47,6 +48,10 @@ impl fmt::Display for WavInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let sample_type = match self.sample_type {
             1 => "PCM",
+            3 => "IEEE Float",
+            6 => "8-bit ITU-T G.711 A-law",
+            7 => "8-bit ITU-T G.711 µ-law",
+            254 => "Wav Extensible Format",
             _ => "Unsupported",
         };
         f.write_str(format!("Wav Info:\nSample Type: {}\nSample rate: {} Hz\nSample size: {} bit\nBlock Size: {} bytes\nData Rate: {} bytes/sec\nChannels: {}\nDuration: {} secs\nFile size: {} bytes", sample_type, self.sample_rate, self.bit_depth, self.data_block_size, self.data_rate, self.channels, self.audio_duration, self.file_size).as_str())
@@ -59,16 +64,40 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     f.seek_relative(4).unwrap();
     let f_size: u32 = read_le_uint(f, 4);
     f.seek_relative(12).unwrap();
-    let fmt_code = read_le_uint(f, 2) as u8;
+    let mut fmt_code = read_le_uint(f, 2) as u8;
     let channels = read_le_uint(f, 2) as u8;
     let sample_rate = read_le_uint(f, 4);
-    let _data_rate = read_le_uint(f, 4); // are not used since WavInfo::new calculates these
-    let _data_block_size = read_le_uint(f, 2); // are not used since WavInfo::new calculates these
+    let _data_rate = read_le_uint(f, 4); // not used since WavInfo::new calculates these
+    let _data_block_size = read_le_uint(f, 2); // not used since WavInfo::new calculates these
     let bit_depth = read_le_uint(f, 2);
 
-    //non-PCM sample formats have not yet been implemented
-    if fmt_code != 1 {
-        panic!("Unsupported wav sample format");
+    //only really reading this stuff for potential future use, its not used at the moment
+    let ext_size: u8;
+    let _v_bits_per_sample: u8; // information about the precision of IEEE floats in file, unused here
+    let _channel_mask: u32; // mapping from channels to physical speakers, isnt used here
+    let _subformat: String;
+
+    // bit depths of 8 or less in PCM use offset binary instead of 
+    // 2's complement which idk how to parse so ..
+    if fmt_code == 1 && bit_depth <= 8 {
+        panic!("Unsupported bit depth (bit depth 8 or lower)");
+    }
+
+    match fmt_code {
+        1 => {}, //no extra parsing needed for PCM data
+        3 | 6 | 7 | 0xFE => { //non-PCM data should always have the ext_size field
+            ext_size = read_le_uint(f, 2) as u8;
+            if ext_size > 0 {
+                _v_bits_per_sample = read_le_uint(f, 2) as u8;
+                _channel_mask = read_le_uint(f, 4);
+                // files with extension data store the actual format code
+                // late in the file so now we read it in again ...
+                fmt_code = read_le_uint(f, 2) as u8;
+            }
+        },
+        _ => {
+            panic!("Unknown format code!");
+        }
     }
 
     f.seek(SeekFrom::Start(0)).unwrap();
@@ -105,79 +134,85 @@ pub fn read_data(
     f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64)
         .unwrap();
 
-    let mut data = vec![0; total_samples * sample_size];
-
-    match f.read_exact(&mut data) {
-        Err(err) => {
-            match err.kind() {
-                ErrorKind::UnexpectedEof => {
-                    f.seek(SeekFrom::Start(
-                        file_info.chunks.get("data".into()).unwrap().0,
-                    ))
-                    .unwrap();
-                    //skip to start_pos in the file
-                    f.seek_relative(
-                        (start_pos * file_info.sample_rate as f32 * file_info.channels as f32)
-                            as i64,
-                    )
-                    .unwrap();
-
-                    data = vec![];
-                    f.read_to_end(&mut data).unwrap();
-                    samples_per_channel = data.len() / channels / sample_size;
-                }
-                _ => panic!("Unexpected error while reading file: {}", err),
-            }
-        }
-        Ok(()) => (),
+    let mut data: Vec<u8>;
+    //either read the amount of data requested, or read to EOF
+    if f.stream_position().unwrap() + total_samples as u64 * sample_size as u64 > file_info.file_size as u64 {
+        data = vec![];
+        f.read_to_end(&mut data).unwrap();
+        samples_per_channel = data.len() / channels / sample_size;
+    } else {
+        data = vec![0; total_samples * sample_size];
+        f.read_exact(&mut data).unwrap();
     }
 
     let mut output = vec![vec![0.; samples_per_channel]; channels];
 
-    match file_info.bit_depth {
-        16 => {
-            for i in 0..samples_per_channel {
-                let idx = i * sample_size * channels;
-                for j in 0..channels {
-                    let ch_offset = j * sample_size + idx;
-                    output[j][i] = (((data[ch_offset + 1] as i32) << 24
-                        | (data[ch_offset] as i32) << 16)
-                        >> 16) as f32
-                        / 0xFFFF as f32;
+    match file_info.sample_type {
+        1 => { //Regular PCM data
+            match file_info.bit_depth {
+                16 => {
+                    for i in 0..samples_per_channel {
+                        let idx = i * sample_size * channels;
+                        for j in 0..channels {
+                            let ch_offset = j * sample_size + idx;
+                            output[j][i] = (((data[ch_offset + 1] as i32) << 24
+                                | (data[ch_offset] as i32) << 16)
+                                >> 16) as f32
+                                / 0xFFFF as f32;
+                        }
+                    }
                 }
-            }
-        }
 
-        24 => {
+                24 => {
+                    for i in 0..samples_per_channel {
+                        let idx = i * sample_size * channels;
+                        for j in 0..channels {
+                            let ch_idx = j * sample_size + idx;
+                            output[j][i] = (((data[ch_idx + 2] as i32) << 24
+                                | (data[ch_idx + 1] as i32) << 16
+                                | (data[ch_idx] as i32) << 8)
+                                >> 8) as f32
+                                / 0xFFFFFF as f32;
+                        }
+                    }
+                }
+
+                32 => {
+                    for i in 0..samples_per_channel {
+                        let idx = i * sample_size * channels;
+                        for j in 0..channels {
+                            let ch_offset = j * sample_size + idx;
+                            output[j][j] = (((data[ch_offset + 3] as i32) << 24
+                                | (data[ch_offset + 2] as i32) << 16
+                                | (data[ch_offset + 1] as i32) << 8)
+                                | (data[ch_offset] as i32)) as f32
+                                / (i32::MAX) as f32;
+                        }
+                    }
+                }
+
+                _ => return None,
+            }
+        },
+        3 => { // IEEE float data
+            // Wav supports 64-bit float so may implement this in future but it is very uncommon
+            if file_info.bit_depth > 32 {
+                panic!("Unsupported bit depth!");
+            }
             for i in 0..samples_per_channel {
                 let idx = i * sample_size * channels;
                 for j in 0..channels {
                     let ch_idx = j * sample_size + idx;
-                    output[j][i] = (((data[ch_idx + 2] as i32) << 24
-                        | (data[ch_idx + 1] as i32) << 16
-                        | (data[ch_idx] as i32) << 8)
-                        >> 8) as f32
-                        / 0xFFFFFF as f32;
+                    let dat: [u8; 4] = get_arr_from_slice(&data[ch_idx..ch_idx+sample_size]);
+                    output[j][i] = f32::from_le_bytes(dat);
                 }
             }
         }
-
-        32 => {
-            for i in 0..samples_per_channel {
-                let idx = i * sample_size * channels;
-                for j in 0..channels {
-                    let ch_offset = j * sample_size + idx;
-                    output[j][j] = (((data[ch_offset + 3] as i32) << 24
-                        | (data[ch_offset + 2] as i32) << 16
-                        | (data[ch_offset + 1] as i32) << 8)
-                        | (data[ch_offset] as i32)) as f32
-                        / (i32::MAX) as f32;
-                }
-            }
-        }
-
-        _ => return None,
+        _ => {
+            panic!("Unsupported file format!");
+        },
     }
+
 
     Some(output)
 }
@@ -307,6 +342,17 @@ pub fn read_data_interleaved_unchecked<T: Read>(
     }
 
     out_data
+}
+
+fn get_arr_from_slice(slice: &[u8]) -> [u8; 4] {
+    if slice.len() > 4 {
+        panic!("attempted to convert slice of size {} to size 4", slice.len());
+    }
+    let mut out = [0; 4];
+    for i in 0..slice.len() {
+        out[i] = slice[i];
+    }
+    out
 }
 
 pub fn read_str(f: &mut BufReader<File>, bytes: usize) -> String {
