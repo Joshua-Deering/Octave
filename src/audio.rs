@@ -80,7 +80,7 @@ impl WindowFunction {
     pub fn from_str(str: &str) -> Option<Self> {
         match str.to_lowercase().as_str() {
             "square" => Some(WindowFunction::Square),
-            "hann" => Some(WindowFunction::Hann),
+            "hann" | "bellcurve" => Some(WindowFunction::Hann),
             _ => None
         }
     }
@@ -112,4 +112,11 @@ pub struct FreqData {
 
 impl FreqData {
     pub const ZERO: Self = FreqData { frequency: 0., amplitude: 0., phase: 0. };
+    pub fn new(frequency: f32, amplitude: f32, phase: f32) -> Self {
+        Self {
+            frequency,
+            amplitude,
+            phase,
+        }
+    }
 }
