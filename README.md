@@ -18,7 +18,7 @@ Wav Parser is a console-based app that can do various processing on Wav files. I
 ---
 
 Spectrogram of a song:
-![t7](https://github.com/user-attachments/assets/8d1c0a0d-8348-4f29-b8a9-798e4cd051d2)
+![Spectrogram of a song](https://github.com/user-attachments/assets/2132beba-0c42-4e4b-9396-4323e89fbcbf)
 Spectrogram of some random oscillating frequencies:
 <img widtg="1170" alt="Spectrogram of some random oscillating frequencies" src="https://github.com/user-attachments/assets/4ca14da9-b445-48f5-8853-07e63d223460">
 
