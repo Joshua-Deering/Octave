@@ -12,7 +12,8 @@ Wav Parser is a console-based app that can do various processing on Wav files. I
 * Waveform generator
 
 ## Planned Features:
-* Transient detection / visualizer
+* Parametric EQ (real time?)
+* File Analyzer (LUFS, True Peak, etc.)
 * Real-Time-Analyzer (RTA)
 * Support for more Wav-type formats and possibly other formats (mp3, ALAC, AAC, etc.)
 
