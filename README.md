@@ -23,7 +23,7 @@ Spectrogram of a song:
 Waveform of the same song:
 ![Waveform of a song](https://github.com/user-attachments/assets/09c471ac-299b-40bc-bc2a-6353cd6d70cf)
 Spectrogram of some random oscillating frequencies:
-![Spectrogram of oscillating frequencies](https://github.com/user-attachments/assets/15123808-b341-407c-8806-4f6b483a5d33)
+![Spectrogram of some random oscillating frequencies](https://github.com/user-attachments/assets/4fed4616-fd85-4656-9cb4-2af9f1fbc74c)
 Waveform of the same oscillating frequencies:
 ![Waveform of the same oscillating frequencies](https://github.com/user-attachments/assets/d57da608-e608-4482-bbbc-f5595f1e4025)
 
