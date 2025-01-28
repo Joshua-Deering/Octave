@@ -9,9 +9,9 @@ Wav Parser is a console-based app that can do various processing on Wav files. I
 * Play Audio from Wav Files
 * Perform Short-Time Fourier Transforms with different window functions (Hann window, Square window)
 * Generate Spectrograms from wav files
+* Waveform generator
 
 ## Planned Features:
-* Waveform generator
 * Transient detection / visualizer
 * Real-Time-Analyzer (RTA)
 * Support for more Wav-type formats and possibly other formats (mp3, ALAC, AAC, etc.)
@@ -23,7 +23,8 @@ Spectrogram of a song:
 Waveform of the same song:
 ![Waveform of a song](https://github.com/user-attachments/assets/09c471ac-299b-40bc-bc2a-6353cd6d70cf)
 Spectrogram of some random oscillating frequencies:
-<img widtg="1170" alt="Spectrogram of some random oscillating frequencies" src="https://github.com/user-attachments/assets/4ca14da9-b445-48f5-8853-07e63d223460">
+![Spectrogram of oscillating frequencies](https://github.com/user-attachments/assets/15123808-b341-407c-8806-4f6b483a5d33)
+Waveform of the same oscillating frequencies:
 ![Waveform of the same oscillating frequencies](https://github.com/user-attachments/assets/d57da608-e608-4482-bbbc-f5595f1e4025)
 
 
