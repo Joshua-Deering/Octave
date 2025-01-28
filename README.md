@@ -4,12 +4,13 @@ Wav Parser is a console-based app that can do various processing on Wav files. I
 
 ## What it can do:
 * Discrete Fourier Transforms
+    * Naive DFT
+    * Fast Fourier Transform (Radix-2 algorithm)
 * Play Audio from Wav Files
 * Perform Short-Time Fourier Transforms with different window functions (Hann window, Square window)
 * Generate Spectrograms from wav files
 
 ## Planned Features:
-* A Fast Fourier Transform (FFT) algorithm
 * Waveform generator
 * Transient detection / visualizer
 * Real-Time-Analyzer (RTA)

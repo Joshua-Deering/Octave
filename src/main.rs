@@ -11,6 +11,7 @@ use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_fil
 use audio::WindowFunction;
 use players::{FilePlayer, Play, SignalPlayer};
 
+use core::f32;
 use std::fs::File;
 use std::io::{stdin, BufReader};
 use std::sync::{Arc, Mutex};
@@ -70,35 +71,52 @@ fn do_stdft(file_choice: &str) {
     //clear the console output
     print!("{}[2J", 27 as char);
 
-    println!("Enter the start point of the Short-Time DFT (seconds)");
-    let start = read_stdin_f32();
-    println!("Enter the duration of the Short-Time DFT (seconds)");
-    let duration = read_stdin_f32();
-    println!("Enter the window size (duration of each DFT)");
-    let window_size = read_stdin_f32();
-    println!("Enter the window overlap (percent, in from 0-1)");
-    let overlap = read_stdin_f32();
-    println!("Enter which window function to use: (0: Square, 1: BellCurve)");
-    let window_func = WindowFunction::from(read_stdin_usize());
-    println!("Enter the filename for the resulting Short-Time DFT (without the extension)");
-    let mut dest_file = String::new();
-    stdin().read_line(&mut dest_file).unwrap();
-
     let f = File::open(format!("./res/audio/{}", file_choice)).expect("Failed to open file!");
     let mut reader = BufReader::new(f);
     let file_info = file_io::read_wav_meta(&mut reader);
     let sample_rate = file_info.sample_rate;
     let channels = file_info.channels;
 
+    println!("Enter the start point of the Short-Time DFT (seconds)");
+    let start = read_stdin_f32(0., f32::MAX);
+    println!("Enter the duration of the Short-Time DFT (seconds)");
+    let duration = read_stdin_f32(f32::EPSILON, f32::MAX);
+    println!("Enter the window size (duration of each DFT)");
+    let window_size = read_stdin_f32(f32::EPSILON, duration);
+    println!("Enter the window overlap (percent, up to 90%)");
+    let overlap = read_stdin_usize(0, 90);
+    println!("Enter which window function to use: (0: Square, 1: Hann)");
+    let window_func = WindowFunction::from(read_stdin_usize(0, 1));
+    println!("Should the stdft be done on all {} channels of the file? (y/n)", channels);
+    let channel_choice;
+    let num_ch;
+    if read_stdin_bool() {
+        channel_choice = 0..=(channels as usize - 1);
+        num_ch = channels;
+    } else {
+        println!("Which channel should the stdft be done on? (0-{})", channels);
+        let choice = read_stdin_usize(0, channels as usize - 1);
+        channel_choice = choice..=choice;
+        num_ch = 1;
+    }
+    println!("Enter the filename for the resulting Short-Time DFT (without the extension)");
+    let mut dest_file = String::new();
+    stdin().read_line(&mut dest_file).unwrap();
+
+
     let signal = read_data(&mut reader, file_info, start, duration).unwrap();
     let original_signal = SignalPlayer::new(signal, sample_rate, channels as usize);
+    
+    println!("Starting {} Short-Time DFTs...\n------", num_ch);
+    for i in channel_choice {
+        println!("Performing Short-Time DFT #{}...", i);
+        let stdft = original_signal.do_short_time_fourier_transform(window_size, overlap as f32 / 100., window_func, i);
+        println!("Short-Time DFT #{} Complete!", i);
 
-    println!("Performing Short-Time DFT...");
-    let stdft = original_signal.do_short_time_fourier_transform(window_size, overlap, window_func);
-    println!("Short-Time DFT Complete!");
-
-    println!("Writing to File...");
-    write_stdft_to_file(format!("./res/stdfts/{}.stdft", dest_file.trim()), &stdft);
+        println!("Writing stdft #{} to File...", i);
+        write_stdft_to_file(format!("./res/stdfts/{}_ch{}.stdft", dest_file.trim(), i), &stdft);
+        println!("Done #{}!", i);
+    }
     println!("Done!");
     thread::sleep(Duration::from_millis(500));
 }
@@ -253,8 +271,6 @@ fn create_spectrogram(dir: &str) {
     let imgx = read_stdin_u32();
     println!("Enter the height of the image:");
     let imgy = read_stdin_u32();
-    println!("Should the generated image have a logarithmic y-axis?");
-    let is_log_scale = read_stdin_bool();
     println!("Enter the file name of the resulting image (without the extension)");
     let mut dest_file = String::new();
     stdin()
@@ -270,7 +286,6 @@ fn create_spectrogram(dir: &str) {
         imgx,
         imgy,
         stdft,
-        is_log_scale,
     )
     .expect("Failed to save image!");
     println!("Done!");
