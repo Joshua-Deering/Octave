@@ -5,11 +5,11 @@ mod img_generator;
 mod players;
 mod util;
 
-use util::*;
-use img_generator::generate_img;
-use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file, WavInfo};
 use audio::WindowFunction;
+use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file, WavInfo};
+use img_generator::{generate_spectrogram_img, generate_waveform_img};
 use players::{FilePlayer, Play, SignalPlayer};
+use util::*;
 
 use core::f32;
 use std::fs::File;
@@ -29,6 +29,7 @@ fn main() -> std::io::Result<()> {
         MenuOption::new("Play Audio", || play_audio_menu()),
         MenuOption::new("Perform Short-Time DFT", || do_stdft_menu()),
         MenuOption::new("Create Spectrogram", || create_spectrogram_menu()),
+        MenuOption::new("Create Waveform", || create_waveform_menu()),
     ];
 
     let mut menu = Menu::new(
@@ -87,14 +88,20 @@ fn do_stdft(file_choice: &str) {
     let overlap = read_stdin_usize(0, 90);
     println!("Enter which window function to use: (0: Square, 1: Hann)");
     let window_func = WindowFunction::from(read_stdin_usize(0, 1));
-    println!("Should the stdft be done on all {} channels of the file? (y/n)", channels);
+    println!(
+        "Should the stdft be done on all {} channels of the file? (y/n)",
+        channels
+    );
     let channel_choice;
     let num_ch;
     if read_stdin_bool() {
         channel_choice = 0..=(channels as usize - 1);
         num_ch = channels;
     } else {
-        println!("Which channel should the stdft be done on? (0-{})", channels);
+        println!(
+            "Which channel should the stdft be done on? (0-{})",
+            channels
+        );
         let choice = read_stdin_usize(0, channels as usize - 1);
         channel_choice = choice..=choice;
         num_ch = 1;
@@ -103,18 +110,25 @@ fn do_stdft(file_choice: &str) {
     let mut dest_file = String::new();
     stdin().read_line(&mut dest_file).unwrap();
 
-
     let signal = read_data(&mut reader, file_info, start, duration).unwrap();
     let original_signal = SignalPlayer::new(signal, sample_rate, channels as usize);
-    
+
     println!("Starting {} Short-Time DFTs...\n------", num_ch);
     for i in channel_choice {
         println!("Performing Short-Time DFT #{}...", i);
-        let stdft = original_signal.do_short_time_fourier_transform(window_size, overlap as f32 / 100., window_func, i);
+        let stdft = original_signal.do_short_time_fourier_transform(
+            window_size,
+            overlap as f32 / 100.,
+            window_func,
+            i,
+        );
         println!("Short-Time DFT #{} Complete!", i);
 
         println!("Writing stdft #{} to File...", i);
-        write_stdft_to_file(format!("./res/stdfts/{}_ch{}.stdft", dest_file.trim(), i), &stdft);
+        write_stdft_to_file(
+            format!("./res/stdfts/{}_ch{}.stdft", dest_file.trim(), i),
+            &stdft,
+        );
         println!("Done #{}!", i);
     }
     println!("Done!");
@@ -153,7 +167,11 @@ fn play_audio_menu() {
 
 fn play_audio_stream(file_meta: WavInfo, reader: &mut BufReader<File>) {
     println!("Audio player starting");
-    let signal_player = Arc::new(Mutex::new(SignalPlayer::new(read_data(reader, file_meta.clone(), 0., file_meta.audio_duration).unwrap(), file_meta.sample_rate, file_meta.channels as usize)));
+    let signal_player = Arc::new(Mutex::new(SignalPlayer::new(
+        read_data(reader, file_meta.clone(), 0., file_meta.audio_duration).unwrap(),
+        file_meta.sample_rate,
+        file_meta.channels as usize,
+    )));
 
     let host: Host = cpal::default_host();
     let device: Device = host
@@ -249,7 +267,7 @@ fn create_spectrogram_menu() {
     let mut menu_options: Vec<MenuOption> = vec![];
     for file in files {
         menu_options.push(MenuOption::new(file.clone().as_str(), move || {
-            create_spectrogram(&file)
+            generate_spectrogram(&file)
         }));
     }
 
@@ -264,7 +282,7 @@ fn create_spectrogram_menu() {
     stdft_file_menu.show();
 }
 
-fn create_spectrogram(dir: &str) {
+fn generate_spectrogram(dir: &str) {
     print!("{}[2J", 27 as char);
 
     println!("Enter the width of the image:");
@@ -281,13 +299,65 @@ fn create_spectrogram(dir: &str) {
     let stdft = read_stdft_from_file(("./res/stdfts/".to_string() + dir).as_str());
 
     println!("Generating image...");
-    generate_img(
+    generate_spectrogram_img(
         format!("./res/spectrograms/{}.png", dest_file.trim()),
         imgx,
         imgy,
         stdft,
     )
     .expect("Failed to save image!");
+    println!("Done!");
+    thread::sleep(Duration::from_millis(500));
+}
+
+
+fn create_waveform_menu() {
+    let files = query_directory("./res/audio");
+
+    let mut menu_options: Vec<MenuOption> = vec![];
+    for file in files {
+        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
+            generate_waveform(&file)
+        }));
+    }
+
+    let mut stdft_file_menu = Menu::new(
+        menu_options,
+        MenuProps {
+            title: "Choose a File:",
+            message: "<esc> to close",
+            ..menu_default_with_colors()
+        },
+    );
+    stdft_file_menu.show();
+}
+
+fn generate_waveform(dir: &str) {
+    print!("{}[2J", 27 as char);
+
+    println!("Enter the width of the image:");
+    let imgx = read_stdin_u32();
+    println!("Enter the height of the image:");
+    let imgy = read_stdin_u32();
+    println!("Enter the file name of the resulting image (without the extension)");
+    let mut dest_file = String::new();
+    stdin()
+        .read_line(&mut dest_file)
+        .expect("Failed to read input");
+
+    let mut f =
+        BufReader::new(File::open(format!("./res/audio/{}", dir)).expect("Failed to open file!"));
+    let file_info = file_io::read_wav_meta(&mut f);
+
+    println!("Generating image...");
+    generate_waveform_img(
+        format!("./res/waveforms/{}.png", dest_file.trim()),
+        imgx,
+        imgy,
+        read_data(&mut f, file_info.clone(), 0., file_info.audio_duration).unwrap(),
+    )
+    .unwrap();
+
     println!("Done!");
     thread::sleep(Duration::from_millis(500));
 }
