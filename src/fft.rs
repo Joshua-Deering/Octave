@@ -19,6 +19,7 @@ pub trait DFT {
     fn process(&self, buffer: &[f32]) -> Vec<FreqData>;
 }
 
+#[allow(unused)]
 pub enum DftType {
     NAIVE,
     FFT
@@ -28,24 +29,29 @@ pub struct Fft {
     pub frequency_step: f32,
     pub buffer_size: usize,
     pub twiddle_factors: Vec<Complex>,
+    non_padded_buf_size: usize,
     window_function: Vec<f32>,
 }
 
 impl Fft {
     pub fn new(sample_rate: u32, buffer_size: usize, window_function: WindowFunction) -> Self {
-        //this fft can only deal with power-of-two sized buffers
-        assert!(buffer_size & (buffer_size - 1) == 0);
 
-        let frequency_step = sample_rate as f32 / buffer_size as f32;
+        let mut padded_buf_size = buffer_size;
+        if buffer_size & (buffer_size - 1) != 0 {
+            padded_buf_size = usize::pow(2, f32::log2(buffer_size as f32) as u32 + 1);
+        }
 
-        let twiddle_factors = Self::compute_twiddles(buffer_size);
-        let window_function = Self::compute_window_func(buffer_size, window_function);
+        let frequency_step = sample_rate as f32 / padded_buf_size as f32;
+
+        let twiddle_factors = Self::compute_twiddles(padded_buf_size);
+        let window_function = Self::compute_window_func(padded_buf_size, window_function);
 
         Self{
             frequency_step,
-            buffer_size,
+            buffer_size: padded_buf_size,
             twiddle_factors,
-            window_function, 
+            window_function,
+            non_padded_buf_size: buffer_size
         }
     }
 
@@ -133,12 +139,13 @@ impl Fft {
 
 impl DFT for Fft {
     fn process(&self, buffer: &[f32]) -> Vec<FreqData> {
-        assert!(buffer.len() == self.buffer_size);
-        
         let mut complex_buffer = Vec::with_capacity(self.buffer_size);
         // convert real-valued inputs to complex inputs, and premultiply by the window function
-        for i in 0..self.buffer_size {
+        for i in 0..self.non_padded_buf_size {
             complex_buffer.push(Complex::new(buffer[i] * self.window_function[i], 0.));
+        }
+        for _ in self.non_padded_buf_size..self.buffer_size {
+            complex_buffer.push(Complex::new(0., 0.));
         }
         //modifies the complex_buffer in-place to be the output of the fft
         self.compute_fft_in_place(complex_buffer.as_mut_slice());
@@ -149,7 +156,7 @@ impl DFT for Fft {
 
             let freq = i as f32 * self.frequency_step;
             let amp = center.magnitude() * 2.;
-            let phase = -f32::atan2(complex_buffer[i].i, complex_buffer[i].r);
+            let phase = f32::atan2(complex_buffer[i].i, complex_buffer[i].r);
             let cur_data = FreqData::new(freq, amp, phase);
             out.push(cur_data);
         }
@@ -168,7 +175,7 @@ pub struct NaiveDft {
 impl NaiveDft {
     pub fn new(sample_rate: u32, buffer_size: usize, window_function: WindowFunction) -> Self {
         let frequency_step = sample_rate as f32 / buffer_size as f32;
-        let num_frequencies = buffer_size / 2 + 1;
+        let num_frequencies = buffer_size / 2;
         
         let available_threads = thread::available_parallelism().unwrap();
         
