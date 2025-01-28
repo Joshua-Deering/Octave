@@ -118,7 +118,7 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
 pub fn read_data(
     f: &mut BufReader<File>,
     file_info: WavInfo,
-    start_pos: f32,
+    start_time: f32,
     duration: f32,
 ) -> Option<Vec<Vec<f32>>> {
     let sample_size = (file_info.bit_depth / 8) as usize;
@@ -130,15 +130,17 @@ pub fn read_data(
         file_info.chunks.get("data".into()).unwrap().0,
     ))
     .unwrap();
+    let file_start_pos = (start_time * file_info.sample_rate as f32 * file_info.channels as f32) as i64;
     //skip to start_pos in the file
-    f.seek_relative((start_pos * file_info.sample_rate as f32 * file_info.channels as f32) as i64)
+    f.seek_relative(file_start_pos)
         .unwrap();
 
     let mut data: Vec<u8>;
+    let (data_start, data_size) = *file_info.chunks.get("data").unwrap();
     //either read the amount of data requested, or read to EOF
-    if f.stream_position().unwrap() + total_samples as u64 * sample_size as u64 > file_info.file_size as u64 {
-        data = vec![];
-        f.read_to_end(&mut data).unwrap();
+    if f.stream_position().unwrap() + total_samples as u64 * sample_size as u64 > (data_start + data_size as u64) {
+        data = vec![0; (data_start + data_size as u64) as usize - f.stream_position().unwrap() as usize];
+        f.read_exact(&mut data).unwrap();
         samples_per_channel = data.len() / channels / sample_size;
     } else {
         data = vec![0; total_samples * sample_size];
