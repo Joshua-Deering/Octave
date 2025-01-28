@@ -18,10 +18,9 @@ pub fn generate_signal(freq_data: &Vec<FreqData>, sample_rate: usize, duration: 
 }
 
 pub struct ShortTimeDftData {
-    pub dft_data: Vec<Vec<Vec<FreqData>>>,
+    pub dft_data: Vec<Vec<FreqData>>,
     pub window_type: WindowFunction,
     pub overlap: f32,
-    pub num_channels: u32,
     pub num_dfts: u32,
     pub num_freq: u32,
     pub sample_rate: u32,
@@ -29,28 +28,28 @@ pub struct ShortTimeDftData {
 }
 
 impl ShortTimeDftData {
-    pub fn new(dft_data: Vec<Vec<Vec<FreqData>>>, window_type: WindowFunction, overlap: f32, num_channels: u32, num_dfts: u32, num_freq: u32, sample_rate: u32) -> Self {
-        let data_size = (size_of_val(&dft_data[0][0][0]) as u32 * num_channels * num_dfts * num_freq) as usize + (size_of::<u32>() * 4);
-        Self { dft_data, window_type, overlap, num_channels, num_dfts, num_freq, sample_rate, data_size }
+    pub fn new(dft_data: Vec<Vec<FreqData>>, window_type: WindowFunction, overlap: f32, num_dfts: u32, num_freq: u32, sample_rate: u32) -> Self {
+        let data_size = (size_of_val(&dft_data[0][0]) as u32 * num_dfts * num_freq) as usize + (size_of::<u32>() * 4);
+        Self { dft_data, window_type, overlap, num_dfts, num_freq, sample_rate, data_size }
     }
-    pub fn new_with_size(dft_data: Vec<Vec<Vec<FreqData>>>, window_type: WindowFunction, overlap: f32, num_channels: u32, num_dfts: u32, num_freq: u32, sample_rate: u32, data_size: usize) -> Self {
-        Self { dft_data, window_type, overlap, num_channels, num_dfts, num_freq, sample_rate, data_size }
+    pub fn new_with_size(dft_data: Vec<Vec<FreqData>>, window_type: WindowFunction, overlap: f32, num_dfts: u32, num_freq: u32, sample_rate: u32, data_size: usize) -> Self {
+        Self { dft_data, window_type, overlap, num_dfts, num_freq, sample_rate, data_size }
     }
 }
 
 impl fmt::Display for ShortTimeDftData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(format!("Short Time DFT Data:\nSample Rate: {} Hz\n# Channels: {}\n# DFTs: {}\n# Frequencies: {}\nTotal Data Size: {} bytes", self.sample_rate, self.num_channels, self.num_dfts, self.num_freq, self.data_size).as_str())
+        f.write_str(format!("Short Time DFT Data:\nSample Rate: {} Hz\n# DFTs: {}\n# Frequencies: {}\nTotal Data Size: {} bytes", self.sample_rate, self.num_dfts, self.num_freq, self.data_size).as_str())
     }
 }
 
 pub fn do_short_time_fourier_transform(samples: &Vec<f32>, sample_rate: u32, window_size: f32, overlap: f32, window_func: WindowFunction) -> Vec<Vec<FreqData>> {
     let samples_per_window = (window_size * sample_rate as f32).round() as usize;
-    let overlap_size = (samples_per_window as f32 * overlap).round() as usize;
+    let overlap_size = (samples_per_window as f32 * overlap).floor() as usize;
     let step_size = samples_per_window - overlap_size;
     let num_windows = samples.len() / (samples_per_window - overlap_size);
 
-    let dft = create_dft(Some(DftType::NAIVE), sample_rate, samples_per_window, window_func);
+    let dft = create_dft(Some(DftType::FFT), sample_rate, samples_per_window, window_func);
     
     let mut out: Vec<Vec<FreqData>> = vec![vec![]; num_windows];
     let mut window_idx = 0;

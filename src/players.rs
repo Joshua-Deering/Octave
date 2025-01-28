@@ -34,25 +34,22 @@ impl SignalPlayer {
         window_size: f32,
         overlap: f32,
         window_func: WindowFunction,
+        channel: usize,
     ) -> ShortTimeDftData {
-        let mut dft_data = vec![vec![]; self.channels];
-        for i in 0..self.channels {
-            dft_data[i] = do_short_time_fourier_transform(
-                &self.samples[i],
-                self.sample_rate,
-                window_size,
-                overlap,
-                window_func,
-            );
-        }
-        let ch = dft_data.len() as u32;
-        let dfts = dft_data[0].len() as u32;
-        let freqs = dft_data[0][0].len() as u32;
+        let dft_data = do_short_time_fourier_transform(
+            &self.samples[channel],
+            self.sample_rate,
+            window_size,
+            overlap,
+            window_func,
+        );
+
+        let dfts = dft_data.len() as u32;
+        let freqs = dft_data[0].len() as u32;
         ShortTimeDftData::new(
             dft_data,
             window_func,
             overlap,
-            ch,
             dfts,
             freqs,
             self.sample_rate,

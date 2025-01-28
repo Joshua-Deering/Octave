@@ -1,5 +1,16 @@
 use std::{fs, io, io::stdin};
 
+pub fn get_arr_from_slice(slice: &[u8]) -> [u8; 4] {
+    if slice.len() > 4 {
+        panic!("attempted to convert slice of size {} to size 4", slice.len());
+    }
+    let mut out = [0; 4];
+    for i in 0..slice.len() {
+        out[i] = slice[i];
+    }
+    out
+}
+
 pub fn query_directory(dir: &str) -> impl Iterator<Item = String> {
     let mut entries = fs::read_dir(dir)
         .unwrap()
@@ -74,13 +85,17 @@ pub fn read_stdin_u32() -> u32 {
     }
 }
 
-pub fn read_stdin_usize() -> usize {
+pub fn read_stdin_usize(min: usize, max: usize) -> usize {
     let mut inp = String::new();
     loop {
         stdin().read_line(&mut inp).expect("Failed to read stdin");
 
         if let Ok(num) = inp.trim().parse::<usize>() {
-            return num;
+            if num < min || num > max {
+                println!("Please only enter numbers in the range! ({} to {})", min, max);
+            } else {
+                return num;
+            }
         } else {
             println!("Invalid input! Please only enter valid positive integers");
         }
@@ -88,13 +103,17 @@ pub fn read_stdin_usize() -> usize {
     }
 }
 
-pub fn read_stdin_f32() -> f32 {
+pub fn read_stdin_f32(min: f32, max: f32) -> f32 {
     let mut inp = String::new();
     loop {
         stdin().read_line(&mut inp).expect("Failed to read stdin");
 
         if let Ok(num) = inp.trim().parse::<f32>() {
-            return num;
+            if num < min || num > max {
+                println!("Please only enter numbers in the range! ({:.2e} to {:.2e})", min, max);
+            } else {
+                return num;
+            }
         } else {
             println!("Invalid input! Please only enter valid positive integers");
         }
