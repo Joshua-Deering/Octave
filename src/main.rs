@@ -25,6 +25,10 @@ use cpal::{
     Data, Device, Host, OutputCallbackInfo, SampleRate, StreamConfig,
 };
 
+//standard initial 2-stage weighting curve for LKFS measurement
+//param_eq.add_biquad(Biquad::with_coefficients(1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585, 48000));
+//param_eq.add_biquad(Biquad::with_coefficients(1., -2., 1., -1.99004745483398, 0.99007225036621, 48000));
+
 fn main() -> std::io::Result<()> {
     let menu_options = vec![
         MenuOption::new("Play Audio", || play_audio_menu()),
