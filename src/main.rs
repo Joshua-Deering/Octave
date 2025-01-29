@@ -4,6 +4,7 @@ mod file_io;
 mod img_generator;
 mod players;
 mod util;
+mod parametric_eq;
 
 use audio::WindowFunction;
 use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file, WavInfo};
