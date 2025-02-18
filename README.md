@@ -17,11 +17,7 @@ Wav Parser is a console-based app that can do various processing on Wav files. I
 * Real-Time-Analyzer (RTA)
 * Support for more Wav-type formats and possibly other formats (mp3, ALAC, AAC, etc.)
 
-## Current Feature work:
-* Working on moving this project to a fully GUI based setup, using Slint.
-   * (most current work is on GUI branch)
-
----
+## Images:
 
 Spectrogram of a song:
 ![Spectrogram of a song](https://github.com/user-attachments/assets/eb9e5d96-d65a-440f-abde-c98774055e67)
