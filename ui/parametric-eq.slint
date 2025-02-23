@@ -1,4 +1,5 @@
 import { Button } from "std-widgets.slint";
+import { Palette } from "./colors.slint";
 
 export struct NodeData {
     gain: float,
@@ -15,18 +16,18 @@ export component ParametricEq {
 
     pure callback initialize_eq_nodes(int, int, int) -> [NodeData];
     pure callback set_eq([NodeData]);
-    pure callback request_eq_response([NodeData], float, float, float, float, length, length) -> image;
+    pure callback request_eq_response([NodeData], float, float, float, float, length, length) -> string;
 
     width: 100%;
     height: 100%;
 
     out property <float> min_freq: 20;
     out property <float> max_freq: 20000;
-    out property <float> min_gain: -20;
-    out property <float> max_gain: 20;
+    out property <float> min_gain: -15;
+    out property <float> max_gain: 15;
 
-    property <length> left_axis_margin: 30px;
-    property <length> bottom_axis_margin: 15px;
+    property <length> left_axis_margin: 0px;
+    property <length> bottom_axis_margin: 0px;
     property <length> graph_margin: 5px;
 
     out property <length> draw_area_width: root.width - left_axis_margin - 2 * graph_margin;
@@ -43,9 +44,13 @@ export component ParametricEq {
     property <length> hovered_node_x;
     property <length> hovered_node_y;
 
-    in-out property <image> eq_graph;
+    in-out property <string> eq_graph_cmds;
     property <bool> on_cooldown;
     property <bool> eq_changed;
+
+    property <[float]> key_freqs: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+    property <[float]> minor_freqs: [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000, 15000];
+    property <[float]> key_gains: [-10, -5, 0, 5, 10];
 
     changed num_nodes => {
         self.eq_nodes = initialize_eq_nodes(self.num_nodes, min_freq, max_freq);
@@ -53,10 +58,90 @@ export component ParametricEq {
     VerticalLayout {
         drawing_area := Rectangle {
             height: 80%;
-            background: darkblue;
-            Image {
-                source: eq_graph;
+            background: Palette.primary;
+
+            //graph lines and labels
+            for f in key_freqs: Rectangle {
+                width: 1px;
+                height: root.draw_area_height;
+                x: freq_to_x(f);
+                y: graph_margin;
+                background: Palette.secondary.transparentize(30%);
             }
+            for f in minor_freqs: Rectangle {
+                width: 1px;
+                height: draw_area_height;
+                x: freq_to_x(f);
+                y: graph_margin;
+                background: Palette.secondary.transparentize(70%);
+            }
+            for f in key_freqs: Text {
+                text: f >= 1000 ? (f / 1000) + "k" : f;
+                x: freq_to_x(f) + 2px;
+                y: gain_to_y(root.min_gain) - self.height;
+                color: Palette.accent1;
+            }
+
+            for g in key_gains: Rectangle {
+                width: root.draw_area_width;
+                height: 1px;
+                x: graph_margin;
+                y: gain_to_y(g);
+                background: Palette.secondary.transparentize(30%);
+            }
+            for g in key_gains: Text {
+                text: g;
+                x: freq_to_x(root.max_freq) - self.width - 2px;
+                y: gain_to_y(g) - self.height;
+                color: Palette.accent1;
+            }
+
+            // eq border
+            Rectangle {
+                width: root.draw_area_width;
+                height: 1px;
+                x: graph_margin;
+                y: gain_to_y(root.max_gain);
+                background: Palette.secondary;
+            }
+            Rectangle {
+                width: root.draw_area_width;
+                height: 1px;
+                x: graph_margin;
+                y: gain_to_y(root.min_gain);
+                background: Palette.secondary;
+            }
+            Rectangle {
+                width: 1px;
+                height: root.draw_area_height;
+                x: freq_to_x(root.min_freq);
+                y: graph_margin;
+                background: Palette.secondary;
+            }
+            Rectangle {
+                width: 1px;
+                height: root.draw_area_height;
+                x: freq_to_x(root.max_freq);
+                y: graph_margin;
+                background: Palette.secondary;
+            }
+
+            Path {
+                width: root.draw_area_width;
+                height: root.draw_area_height;
+                x: graph_margin;
+                y: graph_margin;
+
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: root.draw_area_width / 1px;
+                viewbox-height: root.draw_area_height / 1px;
+
+                stroke: Palette.accent3;
+                stroke-width: 1px;
+                commands: root.eq_graph_cmds;
+            }
+
             Text {
                 x: root.x + 5px;
                 y: root.y + 5px;
@@ -67,15 +152,17 @@ export component ParametricEq {
             for node[i] in eq_nodes: Rectangle {
                 property <bool> has_hover: is_inside(self.x + root.node_rad, self.y + root.node_rad, peq_ta.mouse-x, peq_ta.mouse-y, root.node_rad);
 
-                x: root.node_to_x(node) - root.node_rad;
-                y: root.node_to_y(node) - root.node_rad;
+                x: root.freq_to_x(node.freq) - root.node_rad;
+                y: root.gain_to_y(node.gain) - root.node_rad;
 
                 width: 2 * root.node_rad;
                 height: 2 * root.node_rad;
 
                 border-radius: root.node_rad;
-                border-width: 1px;
-                border-color: has_hover ? blue : black;
+                border-width: 2px;
+                border-color: has_hover ? Palette.accent2 : Palette.accent1;
+
+                background: has_hover ? Palette.accent2.transparentize(0.5) : transparent;
 
                 changed has_hover => {
                     if (self.has_hover == true && (hovered_node == i || !is_hovered)) {
@@ -119,7 +206,7 @@ export component ParametricEq {
                         hovered_node_y = self.mouse-y;
 
                         if (!root.on_cooldown) {
-                            root.eq_graph = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.width, root.height * 0.8);
+                            root.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
                             root.on_cooldown = true;
                             cooldown.running = true;
                         }
@@ -129,19 +216,20 @@ export component ParametricEq {
         }
 
         Rectangle {
-            background: green;
+            background: Palette.primary;
             HorizontalLayout {
                 spacing: 8px;
                 alignment: center;
                 for node[i] in eq_nodes: Rectangle {
                     border-radius: 10px;
-                    background: blue;
+                    background: Palette.secondary;
                     width: root.width / 5 - 8px;
                     height: 20%;
                     Text {
                         text: i + 1;
                         x: (root.x / 5) * i + 5px;
                         y: parent.y + 5px;
+                        color: Palette.accent1;
                     }
 
                     HorizontalLayout {
@@ -151,15 +239,18 @@ export component ParametricEq {
                         VerticalLayout {
                             padding-top: 3px;
                             Text {
-                                text: "Gain: " + node.gain;
+                                text: "Gain: " + Math.floor(node.gain * 100) / 100;
+                                color: Palette.accent1;
                             }
 
                             Text {
-                                text: "Freq: " + node.freq;
+                                text: "Freq: " + Math.floor(node.freq * 100) / 100;
+                                color: Palette.accent1;
                             }
 
                             Text {
-                                text: "Q: " + node.q;
+                                text: "Q: " + Math.floor(node.q * 100) / 100;
+                                color: Palette.accent1;
                             }
                         }
                     }
@@ -176,10 +267,10 @@ export component ParametricEq {
         (Math.pow((c_x - m_x) / 1px, 2) + Math.pow((c_y - m_y) / 1px, 2)) <= Math.pow(r / 1px, 2)
     }
 
-    pure function node_to_x(
-        node: NodeData,
+    pure function freq_to_x(
+        freq: float,
     ) -> length {
-        root.x + root.left_axis_margin + root.graph_margin + ((log(node.freq, 10)-log(root.min_freq, 10))/(log(root.max_freq, 10)-log(root.min_freq, 10))) * root.draw_area_width;
+        root.x + root.left_axis_margin + root.graph_margin + ((log(freq, 10)-log(root.min_freq, 10))/(log(root.max_freq, 10)-log(root.min_freq, 10))) * root.draw_area_width;
     }
 
     pure function x_to_freq(
@@ -188,10 +279,10 @@ export component ParametricEq {
         Math.pow(10, log(root.min_freq, 10) + ((x - root.x - root.left_axis_margin - root.graph_margin) / root.draw_area_width) * (log(root.max_freq, 10) - log(root.min_freq, 10)))
     }
 
-    pure function node_to_y(
-        node: NodeData,
+    pure function gain_to_y(
+        gain: float,
     ) -> length {
-        return (root.draw_area_height / 2) + graph_margin - node.gain / (root.max_gain - root.min_gain) * root.draw_area_height;
+        return (root.draw_area_height / 2) + graph_margin - gain / (root.max_gain - root.min_gain) * root.draw_area_height;
     }
 
     pure function y_to_gain(
@@ -200,7 +291,7 @@ export component ParametricEq {
         if (y > root.draw_area_height / 2) {
             return -((y - root.draw_area_height / 2 - root.graph_margin) / root.draw_area_height) * (root.max_gain - root.min_gain);
         } else if (y < root.draw_area_height / 2) {
-            return 20 - ((y - root.graph_margin) / root.draw_area_height) * (root.max_gain - root.min_gain);
+            return root.max_gain - ((y - root.graph_margin) / root.draw_area_height) * (root.max_gain - root.min_gain);
         } else {
             return 0.0;
         }

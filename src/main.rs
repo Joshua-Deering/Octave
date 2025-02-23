@@ -24,10 +24,10 @@ use img_generator::{generate_eq_response, generate_waveform};
 use players::AudioPlayer;
 use parametric_eq::ParametricEq;
 
-use slint::{run_event_loop, Image, Model, ModelRc, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
-use cpal::{traits::{DeviceTrait, HostTrait}, SampleRate, SupportedOutputConfigs, SupportedStreamConfigRange};
+use slint::{run_event_loop, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use cpal::{traits::{DeviceTrait, HostTrait}, SampleRate};
 
-use std::{fs::File, ops::Deref};
+use std::fs::File;
 use std::cell::RefCell;
 use std::io::BufReader;
 use std::rc::Rc;
@@ -39,6 +39,9 @@ slint::include_modules!();
 //param_eq.add_biquad(Biquad::with_coefficients(1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585, 48000));
 //param_eq.add_biquad(Biquad::with_coefficients(1., -2., 1., -1.99004745483398, 0.99007225036621, 48000));
 
+// Color palette:
+// {"Prussian blue":"273043","Cool gray":"aaadc4","Chamoisee":"8f7e4f","Magenta haze":"a14a76","Carmine":"9b1d20"}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let main_window = MainWindow::new()?;
 
@@ -46,7 +49,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let player: Rc<RefCell<Option<AudioPlayer>>> = Rc::new(RefCell::new(None));
     let player_eq = Arc::new(Mutex::new(ParametricEq::new(vec![], 48000)));
-    let mut cached_buffer: RefCell<Option<SharedPixelBuffer<slint::Rgba8Pixel>>> = RefCell::new(None);
 
     // UI Initialization Logic (called when any menu is opened) ----------------
     let init_ptr = main_window.as_weak();
@@ -148,21 +150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        let mut cached_buffer = cached_buffer.borrow_mut();
-        let imgx = imgx as u32;
-        let imgy = imgy as u32;
-        match cached_buffer.as_ref() {
-            Some(buf) => {
-                if buf.width() != imgx || buf.height() != imgy {
-                    *cached_buffer = Some(SharedPixelBuffer::new(imgx, imgy));
-                }
-            },
-            None => {
-                *cached_buffer = Some(SharedPixelBuffer::new(imgx, imgy));
-            }
-        }
-
-        generate_eq_response(cached_buffer.as_mut().unwrap(), &drawn_eq, low_freq_bound as u32, high_freq_bound as u32, min_gain, max_gain, imgx as u32, imgy as u32)
+        generate_eq_response(&drawn_eq, low_freq_bound, high_freq_bound, min_gain, max_gain, imgx as u32, imgy as u32)
     });
 
     let player_eq_ptr = Arc::clone(&player_eq);

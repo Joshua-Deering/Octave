@@ -1,7 +1,4 @@
 use std::{fs, io};
-use std::ops::Range;
-
-use plotters::coord::ranged1d::AsRangedCoord;
 
 #[allow(unused)]
 pub fn get_arr_from_slice(slice: &[u8]) -> [u8; 4] {

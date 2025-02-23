@@ -1,0 +1,25 @@
+export component Button {
+    in property <color> background;
+    in property <color> text_color;
+    in property <string> text;
+
+    callback clicked();
+    
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: ta.pressed ? root.background.darker(50%) : ta.has-hover ? root.background.darker(-10%) : root.background;
+        border-radius: 5px;
+        Text {
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.text;
+            color: root.text_color;
+        }
+        ta := TouchArea {
+            clicked => {
+                root.clicked();
+            }
+        }
+    }
+}

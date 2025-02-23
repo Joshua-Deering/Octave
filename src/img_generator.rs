@@ -1,10 +1,9 @@
-use std::{io::BufReader, fs::File, cell::RefCell};
+use std::{io::BufReader, fs::File};
 
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
-use plotters::{backend::BGRXPixel, chart::ChartBuilder, prelude::*, series::LineSeries, style::{RGBAColor, ShapeStyle}};
 
-use crate::{/*audio::ShortTimeDftData, */file_io::{read_data, read_wav_meta}, util::{logspace, sym_logspace}, ParametricEq/*, hue_to_rgb*/};
+use crate::{/*audio::ShortTimeDftData, */file_io::{read_data, read_wav_meta}, util::logspace, ParametricEq/*, hue_to_rgb*/};
 
 pub fn generate_waveform(audio_file: SharedString, imgx: f32, imgy: f32) -> Image {
     if audio_file.trim().is_empty() {
@@ -93,42 +92,26 @@ pub fn generate_waveform(audio_file: SharedString, imgx: f32, imgy: f32) -> Imag
 //}
 
 pub fn generate_eq_response(
-    cached_buffer: &mut SharedPixelBuffer<slint::Rgba8Pixel>,
     param_eq: &ParametricEq,
-    low_freq_bound: u32, high_freq_bound: u32,
+    min_freq: f32, max_freq: f32,
     min_gain: f32, max_gain: f32,
-    imgx: u32, imgy: u32) -> Image {
-    let resp = param_eq.get_freq_response_log(low_freq_bound, high_freq_bound, imgx as usize);
-    let size = (imgx, imgy);
+    imgx: u32, imgy: u32) -> SharedString {
 
-    let pixel_buffer = cached_buffer;
+    let freq_to_x = | f: f32 | -> u32 {
+        ((f.log10() - min_freq.log10()) / (max_freq.log10() - min_freq.log10()) * imgx as f32) as u32
+    };
+    let gain_to_y = | gain: f32 | -> u32 {
+        ((imgy / 2) as f32 - gain / (max_gain - min_gain) * imgy as f32) as u32
+    };
 
-    let backend: BitMapBackend<'_, BGRXPixel> = BitMapBackend::with_buffer_and_format(pixel_buffer.make_mut_bytes(), size).unwrap();
+    let eq_points = param_eq.get_freq_response_log(min_freq as u32, max_freq as u32, (imgx / 2) as usize);
 
-    let img = backend.into_drawing_area();
-    img.fill(&WHITE).unwrap();
-
-    let mut chart = ChartBuilder::on(&img)
-        .x_label_area_size(15)
-        .y_label_area_size(30)
-        .margin(5)
-        .build_cartesian_2d((low_freq_bound as f32..high_freq_bound as f32).log_scale(), min_gain..max_gain).unwrap();
-
-    chart.configure_mesh()
-        .draw().unwrap();
-
-    chart.draw_series(LineSeries::new(
-        resp.into_iter().map(|(x, y)| (x as f32, y)),
-        (&BLACK).filled().stroke_width(1)
-    )).unwrap();
-
-    img.present().unwrap();
-
-    //drop chart building items so we can return pixel_buffer
-    drop(chart);
-    drop(img);
-
-    Image::from_rgba8(pixel_buffer.clone())
+    let mut svg_string_cmds: Vec<(u32, u32)> = Vec::with_capacity(eq_points.len());
+    for i in 0..eq_points.len() {
+        svg_string_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1) + 1));
+    }
+    
+    (format!("M {} {} ", freq_to_x(min_freq), gain_to_y(eq_points[0].1)) + svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()).into()
 }
 
 //pub fn generate_spectrogram_img(

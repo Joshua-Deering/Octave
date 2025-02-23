@@ -34,10 +34,11 @@ impl ParametricEq {
         }
     }
 
-    pub fn get_freq_response(&self, lower_bound: u32, upper_bound: u32, num_points: usize) -> Vec<(u32, f32)> {
-        let freq_step = (upper_bound - lower_bound) as usize / num_points;
-        let mut test_pts = vec![(0, 0.); num_points as usize];
-        for (test_freq, i) in (lower_bound..=upper_bound).step_by(freq_step).zip(0..num_points) {
+    pub fn get_freq_response(&self, lower_bound: u32, upper_bound: u32, num_points: usize) -> Vec<(f32, f32)> {
+        let freq_step = (upper_bound - lower_bound) as f32 / num_points as f32;
+        let mut test_pts = vec![(0., 0.); num_points as usize];
+        for i in 0..num_points {
+            let test_freq = i as f32 * freq_step;
             let mut sum = 0.;
             for node in &self.nodes {
                 sum += (20. * node.calc_response(test_freq as f32).log10()) - node.ref_value;
@@ -48,14 +49,14 @@ impl ParametricEq {
         test_pts
     }
 
-    pub fn get_freq_response_log(&self, lower_bound: u32, upper_bound: u32, num_points: usize) -> Vec<(u32, f32)> {
-        let mut test_pts = vec![(0, 0.); num_points as usize];
+    pub fn get_freq_response_log(&self, lower_bound: u32, upper_bound: u32, num_points: usize) -> Vec<(f32, f32)> {
+        let mut test_pts = vec![(0., 0.); num_points as usize];
         for (test_freq, i) in logspace(lower_bound as f32, upper_bound as f32, num_points).zip(0..num_points) {
             let mut sum = 0.;
             for node in &self.nodes {
                 sum += (20. * node.calc_response(test_freq as f32).log10()) - node.ref_value;
             }
-            test_pts[i] = (test_freq as u32, sum);
+            test_pts[i] = (test_freq, sum);
         }
 
         test_pts

@@ -1,0 +1,82 @@
+
+export component ComboBox {
+    in property <color> background;
+    in property <color> text_color;
+
+    in property <[string]> options;
+    in-out property <int> current-index;
+    in-out property <string> current-value;
+
+    in property <bool> enabled: true;
+
+    callback selected();
+    
+    min-width: 100px;
+    min-height: 20px;
+
+    Rectangle {
+
+        background: root.background;
+
+        border-radius: 5px;
+
+        HorizontalLayout {
+            alignment: space-between;
+            spacing: 5px;
+            padding: 5px;
+            Text {
+                text: current-value;
+                color: root.text_color;
+                wrap: no-wrap;
+            }
+            Text {
+                text: "▽";
+            }
+        }
+
+        ta := TouchArea {
+            clicked => {
+                if (root.enabled) {
+                    popup.show();
+                }
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        close-policy: close-on-click;
+        x: 0;
+        y: root.height;
+        width: root.width;
+
+        Rectangle {
+            width: root.width;
+            border-radius: 5px;
+            background: root.background;
+
+            VerticalLayout {
+                for opt[i] in options: Rectangle {
+                    x: 0;
+                    height: root.height;
+                    width: root.width;
+
+                    border-radius: 5px;
+                    background: popup_ta.pressed ? root.background.darker(50%) : popup_ta.has-hover ? root.background.darker(-20%) : root.background.darker(10%);
+
+                    Text {
+                        text: (root.current-index == i ? "✓  " : "") + opt + (root.current-index == i ? "  " : "");
+                        horizontal-alignment: center;
+                        color: root.text_color;
+                    }
+                    popup_ta := TouchArea {
+                        clicked => {
+                            root.current-index = i;
+                            root.current-value = opt;
+                            root.selected();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

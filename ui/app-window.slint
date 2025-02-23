@@ -1,6 +1,8 @@
-import {Button, ComboBox, Slider} from "std-widgets.slint";
 import {PlayerProgressBar} from "./player-progress-bar.slint";
 import {ParametricEq, NodeData} from "./parametric-eq.slint";
+import { Palette } from "./colors.slint";
+import { Button } from "./button.slint";
+import { ComboBox } from "./combobox.slint";
 
 component MainUi {
     callback init_menu(int);
@@ -10,7 +12,7 @@ component MainUi {
     callback render_waveform(string, length, length) -> image;
     pure callback init_eq_nodes(int) -> [NodeData];
     pure callback set_eq([NodeData]);
-    pure callback request_eq_response([NodeData], float, float, float, float, length, length) -> image;
+    pure callback request_eq_response([NodeData], float, float, float, float, length, length) -> string;
 
     in property <int> cur_menu;
     
@@ -33,7 +35,7 @@ component MainUi {
     if (cur_menu == 0): VerticalLayout {
         init => {
             init_menu(0);
-            param_eq.eq_graph = request_eq_response(param_eq.eq_nodes, param_eq.min_freq, param_eq.max_freq, param_eq.min_gain, param_eq.max_gain, param_eq.width, param_eq.graph_height);
+            param_eq.eq_graph_cmds = request_eq_response(param_eq.eq_nodes, param_eq.min_freq, param_eq.max_freq, param_eq.min_gain, param_eq.max_gain, param_eq.draw_area_width, param_eq.draw_area_height);
         }
         width: 100%;
         height: 100%;
@@ -44,7 +46,7 @@ component MainUi {
                     root.init_eq_nodes(n)
                 }
                 request_eq_response(n, lf, hf, min_gain, max_gain, x, y) => {
-                    root.request_eq_response(n, lf, hf, min_gain, max_gain, x, y);
+                    root.request_eq_response(n, lf, hf, min_gain, max_gain, x, y)
                 }
                 set_eq(nodes) => {
                     root.set_eq(nodes);
@@ -52,7 +54,7 @@ component MainUi {
             }
         }
         Rectangle {
-            background: #4287f5;
+            background: Palette.primary;
             height: 75px;
             width: 100%;
 
@@ -60,12 +62,15 @@ component MainUi {
                 alignment: start;
                 Text {
                     text: "Select a file:";
+                    color: Palette.textcol;
                 }
                 ComboBox {
                     width: 200px;
                     x: 0;
-                    model: root.audio_files;
+                    options: root.audio_files;
                     current-index: -1;
+                    background: Palette.secondary;
+                    text_color: Palette.textcol;
                     selected => {
                         root.selected_file = self.current_value;
                         root.is_playing = false;
@@ -83,6 +88,8 @@ component MainUi {
                     height: 40px;
                     x: (root.width / 2) - 40px;
                     text: root.is_playing ? "stop" : "start";
+                    background: Palette.primary.darker(-20%);
+                    text_color: Palette.textcol;
                     clicked => {
                         root.is_playing = !root.is_playing;
                         toggle_play(root.is_playing);
@@ -111,7 +118,7 @@ component MainUi {
         Rectangle {
             height: 80px;
             width: 100%;
-            background: #4287f5;
+            background: Palette.primary;
             Image {
                 height: 100px;
                 width: 100%;
@@ -164,6 +171,7 @@ component MenuButton {
         txt := Text {
             wrap: no-wrap;
             text: root.text;
+            color: Palette.textcol;
             font-size: root.font-size;
         }
     }
@@ -195,7 +203,7 @@ export component MainWindow inherits Window {
 
     HorizontalLayout {
         Rectangle {
-            background: #4287f5;
+            background: Palette.primary;
             VerticalLayout {
                 alignment: center;
                 spacing: 1px;
@@ -203,7 +211,7 @@ export component MainWindow inherits Window {
                     MenuButton {
                         text: "Play Audio";
                         font-size: 15px;
-                        bg: #347bed;
+                        bg: Palette.primary.darker(-20%);
                         btn_pressed() => {
                             if (current-menu != 0) {
                                 close_menu(main_ui.cur_menu);
@@ -218,7 +226,7 @@ export component MainWindow inherits Window {
                     MenuButton {
                         text: "Visualizers";
                         font-size: 15px;
-                        bg: #347bed;
+                        bg: Palette.primary.darker(-20%);
                         btn_pressed() => {
                             if (current-menu != 1) {
                                 close_menu(main_ui.cur_menu);
@@ -233,7 +241,7 @@ export component MainWindow inherits Window {
                     MenuButton {
                         text: "Real-Time Analyzer";
                         font-size: 15px;
-                        bg: #347bed;
+                        bg: Palette.primary.darker(-20%);
                         btn_pressed() => {
                             if (current-menu != 2) {
                                 close_menu(main_ui.cur_menu);
