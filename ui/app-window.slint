@@ -102,6 +102,8 @@ component MainUi {
                         value: root.slider_pos;
                         left_label: format_time(self.value / 100 * file_duration);
                         right_label: format_time(file_duration);
+                        label_color: Palette.textcol;
+                        handle_color: Palette.accent2;
                         handle-pressed-changed(state) => {
                             root.slider_pressed = state;
                         }
@@ -178,8 +180,10 @@ component MenuButton {
 }
 
 export component MainWindow inherits Window {
-    width: 800px;
-    height: 450px;
+    min-width: 800px;
+    min-height: 450px;
+    preferred-width: 1200px;
+    preferred-height: 675px;
     property <int> current-menu: -1;
 
     in property <[string]> audio_files <=> main_ui.audio_files;

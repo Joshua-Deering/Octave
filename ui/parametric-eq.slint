@@ -55,6 +55,12 @@ export component ParametricEq {
     changed num_nodes => {
         self.eq_nodes = initialize_eq_nodes(self.num_nodes, min_freq, max_freq);
     }
+    changed draw_area_width => {
+        self.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+    }
+    changed draw_area_height => {
+        self.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+    }
     VerticalLayout {
         drawing_area := Rectangle {
             height: 80%;
@@ -207,6 +213,7 @@ export component ParametricEq {
 
                         if (!root.on_cooldown) {
                             root.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+
                             root.on_cooldown = true;
                             cooldown.running = true;
                         }

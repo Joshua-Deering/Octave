@@ -4,6 +4,7 @@ export component PlayerProgressBar {
     in property <float> maximum: 100;
     in_out property <float> value: minimum;
 
+    in property <color> label_color: white;
     in property <string> left_label;
     in property <string> right_label;
 
@@ -77,6 +78,7 @@ export component PlayerProgressBar {
             text: left_label;
             horizontal_alignment: right;
             width: root.width * 0.10;
+            color: root.label_color;
         }
         Rectangle {
             horizontal_stretch: 1;
@@ -90,6 +92,7 @@ export component PlayerProgressBar {
             text: right_label;
             horizontal_alignment: left;
             width: root.width * 0.10;
+            color: root.label_color;
         }
     }
 
