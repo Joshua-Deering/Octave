@@ -21,11 +21,11 @@ mod parametric_eq;
 use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
 use util::*;
 use file_io::{read_data, read_wav_meta};
-use img_generator::{generate_eq_response, generate_waveform, generate_spectrogram_img};
+use img_generator::{generate_eq_response, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
 use players::AudioPlayer;
 use parametric_eq::ParametricEq;
 
-use slint::{run_event_loop, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
+use slint::{run_event_loop, Image, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use cpal::{traits::{DeviceTrait, HostTrait}, SampleRate};
 
 use std::fs::File;
@@ -47,7 +47,6 @@ slint::include_modules!();
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let main_window = MainWindow::new()?;
 
-    main_window.on_render_waveform(generate_waveform);
 
     let player: Rc<RefCell<Option<AudioPlayer>>> = Rc::new(RefCell::new(None));
     let player_eq = Arc::new(Mutex::new(ParametricEq::new(vec![], 48000)));
@@ -166,6 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         generate_eq_response(&drawn_eq, low_freq_bound, high_freq_bound, min_gain, max_gain, imgx as u32, imgy as u32)
     });
 
+    // Set audio player EQ
     let player_eq_ptr = Arc::clone(&player_eq);
     main_window.on_set_eq(move | eq_nodes: ModelRc<NodeData> | {
         let mut player_eq = player_eq_ptr.lock().unwrap();
@@ -218,6 +218,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Generate Waveform Preview for Audio Player
+    main_window.on_render_waveform(generate_waveform_preview);
+
     // Spectrogram Generation --------------------------------------------------
     {
         let window_weak = main_window.as_weak();
@@ -238,6 +241,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let num_freqs = stdft[0].len() as u32;
                 let stdft_data = ShortTimeDftData::new(stdft, window_func, window_overlap / 100., num_dfts, num_freqs, sample_rate);
                 let img = generate_spectrogram_img(imgx as u32, imgy as u32, stdft_data);
+                
+                main_window.upgrade_in_event_loop(move |handle| {
+                    handle.set_vis_source(Image::from_rgba8(img));
+                    handle.set_vis_loading(false);
+                }).unwrap();
+            });
+        });
+    }
+
+    // Waveform Generation --------------------------------------------------
+    {
+        let window_weak = main_window.as_weak();
+        main_window.on_generate_waveform(move |file: SharedString, imgx: f32, imgy: f32| {
+            let main_window = window_weak.clone();
+            
+            thread::spawn(move || {
+                let mut reader = BufReader::new(File::open(format!("./res/audio/{}", file)).unwrap());
+                let file_info = read_wav_meta(&mut reader);
+                let file_dur = file_info.audio_duration;
+
+                let samples = read_data(&mut reader, file_info, 0., file_dur).unwrap();
+                
+                let img = generate_waveform_img(imgx as u32, imgy as u32, samples);
                 
                 main_window.upgrade_in_event_loop(move |handle| {
                     handle.set_vis_source(Image::from_rgba8(img));

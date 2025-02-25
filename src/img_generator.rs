@@ -5,7 +5,7 @@ use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 
 use crate::{audio::ShortTimeDftData, file_io::{read_data, read_wav_meta}, ParametricEq, util::hue_to_rgb};
 
-pub fn generate_waveform(audio_file: SharedString, imgx: f32, imgy: f32) -> Image {
+pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32) -> Image {
     if audio_file.trim().is_empty() {
         return Image::default();
     }
@@ -34,7 +34,7 @@ pub fn generate_waveform(audio_file: SharedString, imgx: f32, imgy: f32) -> Imag
         let mut max_val = f32::NEG_INFINITY;
 
         // Process every sample in this bin
-        for i in start.min(total_samples)..end.min(total_samples) {
+        for i in (start.min(total_samples)..end.min(total_samples)).step_by(4) {
             // Average across all channels
             let mut sum = 0.0;
             for ch in 0..channels {
@@ -147,6 +147,36 @@ pub fn generate_spectrogram_img(
                 imgbuf[(y * imgx + x) as usize] = Rgba8Pixel::new(blended.0, blended.1, blended.2, 255);
             }
         }
+    }
+
+    img
+}
+
+pub fn generate_waveform_img(
+    imgx: u32,
+    imgy: u32,
+    samples: Vec<Vec<f32>>
+) -> SharedPixelBuffer<Rgba8Pixel> {
+    let imgx = imgx as usize;
+    
+    let channels = samples.len();
+    
+    let x_scale = imgx as f32 / samples[0].len() as f32;
+    let center_y = (imgy / 2) as usize;
+
+    let mut img = SharedPixelBuffer::new(imgx as u32, imgy);
+    let imgbuf = img.make_mut_slice();
+
+    for i in 0..samples[0].len() {
+        let mut sum = 0.;
+        for j in 0..channels {
+            sum += samples[j][i];
+        }
+        sum /= channels as f32;
+        
+        let x = (i as f32 * x_scale).floor() as usize;
+        let y = ((sum * center_y as f32).floor() + center_y as f32) as usize;
+        imgbuf[y * imgx + x] = Rgba8Pixel::new(0, 255, 0, 255);
     }
 
     img

@@ -3,7 +3,10 @@ import { NumInput } from "./num-input.slint";
 export component LabelledInput {
     in property <string> label;
     in property <string> units;
+
     in-out property <int> value;
+    in property <int> min;
+    in property <int> max;
 
     in property <color> text_color;
     in property <color> input_background;
@@ -11,13 +14,15 @@ export component LabelledInput {
     HorizontalLayout {
         alignment: center;
         Text {
-            text: "Window Size: ";
+            text: label + " ";
             color: root.text_color;
         }
         inp := NumInput {
             background: root.input_background;
             text-color: root.text_color;
             value: root.value;
+            min: root.min;
+            max: root.max;
             changed value => {
                 root.value = self.value;
             }

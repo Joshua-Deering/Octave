@@ -38,6 +38,7 @@ component MainUi {
 
     // VISUALIZER PROPERTIES ------------------------------
     callback generate_spectrogram(string, length, length, int, float, string);
+    callback generate_waveform(string, length, length);
         
     property <length> vis_width;
     property <length> vis_height;
@@ -55,6 +56,8 @@ component MainUi {
     property <float> max_overlap: 90;
     property <[string]> window_opts: ["Square", "Hann"];
     property <string> stdft_window_func: "";
+
+    property <int> waveform_img_height: 100;
     // END VISUALIZER PROPERTIES --------------------------
 
     if (cur_menu == 0): VerticalLayout {
@@ -150,7 +153,7 @@ component MainUi {
                 width: 100%;
                 source: waveform_img;
                 image-rendering: pixelated;
-            }
+    }
             Rectangle {
                 background: white;
                 visible: root.is_playing;
@@ -162,6 +165,11 @@ component MainUi {
     }
 
     if (cur_menu == 1): VerticalLayout {
+        init => {
+            root.cur_vis = "";
+            root.vis_file = "";
+            root.stdft_window_func = "";
+        }
         width: 100%;
         height: 100%;
         Rectangle {
@@ -176,6 +184,9 @@ component MainUi {
             }
             changed height => {
                 vis_height = self.height;
+                if (cur_vis == "Waveform" && root.waveform_img_height * 1px > self.height) {
+                    root.waveform_img_height = self.height / 1px;
+                }
             }
 
             background: Palette.primary;
@@ -210,6 +221,10 @@ component MainUi {
                         text_color: Palette.textcol;
                         selected(val) => {
                             root.cur_vis = val;
+                            //clear the settings from spectrogram when waveform is selected
+                            if (root.cur_vis == "Waveform") {
+                                root.stdft_window_func = "";
+                            }
                         }
                     }
                     Text {
@@ -234,7 +249,9 @@ component MainUi {
                     LabelledInput {
                         label: "Window Size:";
                         units: "ms";
-                        value: 50;
+                        min: 5;
+                        max: 1000;
+                        value: root.stdft_window_size;
                         input_background: Palette.secondary.transparentize(50%);
                         text_color: Palette.textcol;
                         changed value => {
@@ -277,10 +294,22 @@ component MainUi {
                     }
                 }
                 if (root.cur_vis == "Waveform"): VerticalLayout {
-                    
+                    alignment: center;
+                    LabelledInput {
+                        label: "Image Height:";
+                        units: "px";
+                        min: 10;
+                        max: root.vis_height / 1px;
+                        value: root.waveform_img_height;
+                        input_background: Palette.secondary.transparentize(50%);
+                        text_color: Palette.textcol;
+                        changed value => {
+                            root.waveform_img_height = self.value;
+                        }
+                    }
                 }
                 
-                Button {
+                generate_btn := Button {
                     text: "Generate!";
                     height: 50px;
                     y: parent.height / 2 - self.height / 2;
@@ -294,9 +323,14 @@ component MainUi {
                         if (root.cur_vis == "Spectrogram") {
                             root.generate_spectrogram(root.vis_file, root.vis_width, root.vis_height, root.stdft_window_size, root.stdft_overlap, root.stdft_window_func);
                         } else if (root.cur_vis == "Waveform") {
-                            
+                            root.generate_waveform(root.vis_file, root.vis_width, root.waveform_img_height * 1px);
                         }
                     }
+                }
+                if (!generate_btn.visible): Text {
+                    vertical-alignment: center;
+                    text: "Make a selection on all parameters to generate!";
+                    color: red;
                 }
                 
                 // looks cool but currently has high CPU usage...
@@ -390,6 +424,7 @@ export component MainWindow inherits Window {
 
     // VISUALIZER VARIABLES
     callback generate_spectrogram <=> main_ui.generate_spectrogram;
+    callback generate_waveform <=> main_ui.generate_waveform;
 
     in property <[string]> vis_audio_files <=> main_ui.vis_audio_files;
     in property <image> vis_source <=> main_ui.vis_source;

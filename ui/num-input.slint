@@ -5,6 +5,9 @@ export component NumInput {
     in property <color> background;
     in property <color> text-color;
 
+    in property <int> min;
+    in property <int> max;
+
     width: r.width;
     height: r.height;
 
@@ -29,10 +32,16 @@ export component NumInput {
                 return accept;
             }
             accepted => {
-                if (!self.text.is-float() || self.text.to-float() <= 0) {
+                if (!self.text.is-float()) {
                     self.text = root.value;
                 } else {
-                    root.value = self.text.to-float().floor();
+                    if (self.text.to-float().floor() > max) {
+                        root.value = root.max;
+                    } else if (self.text.to-float().floor() < min) {
+                        root.value = root.min;
+                    } else {
+                        root.value = self.text.to-float().floor();
+                    }
                     self.text = root.value;
                 }
             }
