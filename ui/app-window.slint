@@ -1,10 +1,13 @@
-import {PlayerProgressBar} from "./player-progress-bar.slint";
+import { Slider } from "./slider.slint";
 import {ParametricEq, NodeData} from "./parametric-eq.slint";
 import { Palette } from "./colors.slint";
 import { Button } from "./button.slint";
 import { ComboBox } from "./combobox.slint";
+import { LabelledInput } from "./labelled-input.slint";
+import { LoadingSpinner } from "./loading-spinner.slint";
 
 component MainUi {
+    // AUDIO PLAYER PROPERTIES ----------------------------
     callback init_menu(int);
     callback toggle_play(bool);
     callback file_select(string);
@@ -16,7 +19,7 @@ component MainUi {
 
     in property <int> cur_menu;
     
-    in property <[string]> audio_files;
+    in property <[string]> player_audio_files;
     in-out property <bool> is_playing: false;
     in-out property <string> selected_file: "";
     in property <float> file_duration;
@@ -31,7 +34,29 @@ component MainUi {
     pure function format_time(seconds: float) -> string {
         return floor(seconds / 60) + ":" + (floor(Math.mod(seconds, 60)) < 10 ? "0" : "") + floor(Math.mod(seconds, 60));
     }
-    
+    // END AUDIO PLAYER PROPERTIES ------------------------
+
+    // VISUALIZER PROPERTIES ------------------------------
+    callback generate_spectrogram(string, length, length, int, float, string);
+        
+    property <length> vis_width;
+    property <length> vis_height;
+    in property <image> vis_source;
+
+    in property <[string]> vis_audio_files;
+    out property <string> vis_file;
+
+    in-out property <bool> vis_loading: false;
+    property <[string]> vis_types: ["Spectrogram", "Waveform"];
+    property <string> cur_vis: "";
+
+    out property <int> stdft_window_size: 50;
+    out property <int> stdft_overlap: 0;
+    property <float> max_overlap: 90;
+    property <[string]> window_opts: ["Square", "Hann"];
+    property <string> stdft_window_func: "";
+    // END VISUALIZER PROPERTIES --------------------------
+
     if (cur_menu == 0): VerticalLayout {
         init => {
             init_menu(0);
@@ -67,15 +92,14 @@ component MainUi {
                 ComboBox {
                     width: 200px;
                     x: 0;
-                    options: root.audio_files;
-                    current-index: -1;
+                    options: root.player_audio_files;
                     background: Palette.secondary;
                     text_color: Palette.textcol;
-                    selected => {
-                        root.selected_file = self.current_value;
+                    selected(val) => {
+                        root.selected_file = val;
                         root.is_playing = false;
-                        root.file_select(self.current_value);
-                        root.waveform_img = root.render_waveform(self.current_value, root.imgx, root.imgy);
+                        root.file_select(val);
+                        root.waveform_img = root.render_waveform(val, root.imgx, root.imgy);
                     }
                 }
             }
@@ -96,7 +120,7 @@ component MainUi {
                     }
                 }
                 Rectangle {
-                    progress_bar := PlayerProgressBar {
+                    progress_bar := Slider {
                         enabled: root.is_playing;
                         width: 400px;
                         value: root.slider_pos;
@@ -141,7 +165,167 @@ component MainUi {
         width: 100%;
         height: 100%;
         Rectangle {
-            background: green;
+            height: 80%;
+            width: 100%;
+            init => {
+                vis_width = self.width;
+                vis_height = self.height;
+            }
+            changed width => {
+                vis_width = self.width;
+            }
+            changed height => {
+                vis_height = self.height;
+            }
+
+            background: Palette.primary;
+            
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.vis_source;
+                image-rendering: pixelated;
+                image-fit: ImageFit.contain;
+            }
+        }
+        Rectangle {
+            background: Palette.primary.darker(10%);
+            width: 100%;
+            height: 20%;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 30px;
+                
+                VerticalLayout {
+                    alignment: space-around;
+                    Text {
+                        text: "Select a visualization";
+                        color: Palette.textcol;
+                    }
+                    vis_type := ComboBox {
+                        width: 200px;
+                        x: 0;
+                        options: root.vis_types;
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        selected(val) => {
+                            root.cur_vis = val;
+                        }
+                    }
+                    Text {
+                        text: "Select a file:";
+                        color: Palette.textcol;
+                    }
+                    ComboBox {
+                        width: 200px;
+                        x: 0;
+                        options: root.vis_audio_files;
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        selected(val) => {
+                            root.vis_file = val;
+                        }
+                    }
+                }
+
+                
+                if (root.cur_vis == "Spectrogram"): VerticalLayout {
+                    alignment: center;
+                    LabelledInput {
+                        label: "Window Size:";
+                        units: "ms";
+                        value: 50;
+                        input_background: Palette.secondary.transparentize(50%);
+                        text_color: Palette.textcol;
+                        changed value => {
+                            root.stdft_window_size = self.value;
+                        }
+                    }
+                    Text {
+                        horizontal-alignment: center;
+                        text: "Window Overlap: " + root.stdft_overlap + "%";
+                        color: Palette.textcol;
+                    }
+                    Slider {
+                        enabled: true;
+                        width: 150px;
+
+                        value: root.stdft_overlap;
+                        maximum: 90;
+
+                        left_label: "0";
+                        right_label: "90";
+                        label_color: Palette.textcol;
+                        handle_color: Palette.accent2;
+                        changed(value) => {
+                            root.stdft_overlap = (value / 10).round() * 10;
+                        }
+                    }
+                    Text {
+                        horizontal-alignment: center;
+                        text: "Window Function: ";
+                        color: Palette.textcol;
+                    }
+                    ComboBox {
+                        options: root.window_opts;
+                        width: 150px;
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        selected(val) => {
+                            root.stdft_window_func = val;
+                        }
+                    }
+                }
+                if (root.cur_vis == "Waveform"): VerticalLayout {
+                    
+                }
+                
+                Button {
+                    text: "Generate!";
+                    height: 50px;
+                    y: parent.height / 2 - self.height / 2;
+                    visible: root.cur_vis != "" &&
+                             root.vis_file != "" &&
+                             (root.cur_vis == "Spectrogram" ? root.stdft_window_func != "" : true);
+                    background: Palette.accent1;
+                    text_color: Palette.textcol;
+                    clicked => {
+                        root.vis_loading = true;
+                        if (root.cur_vis == "Spectrogram") {
+                            root.generate_spectrogram(root.vis_file, root.vis_width, root.vis_height, root.stdft_window_size, root.stdft_overlap, root.stdft_window_func);
+                        } else if (root.cur_vis == "Waveform") {
+                            
+                        }
+                    }
+                }
+                
+                // looks cool but currently has high CPU usage...
+                //LoadingSpinner {
+                //    y: parent.height / 2 - self.height / 2;
+                //    radius: 15px;
+                //    visible: root.vis_loading;
+                //}
+                Rectangle {
+                    width: 100px;
+                    Text {
+                        property <int> dots: 1;
+                        text: "Loading" + (dots == 1 ? "." : dots == 2 ? ".." : "...");
+                        color: Palette.textcol;
+                        vertical-alignment: center;
+                        visible: root.vis_loading;
+                        Timer {
+                            interval: 500ms;
+                            running: root.vis_loading;
+                            triggered() => {
+                                dots += 1;
+                                if (dots > 3) {
+                                    dots = 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -186,7 +370,8 @@ export component MainWindow inherits Window {
     preferred-height: 675px;
     property <int> current-menu: -1;
 
-    in property <[string]> audio_files <=> main_ui.audio_files;
+    // AUDIO PLAYER VARIABLES
+    in property <[string]> player_audio_files <=> main_ui.player_audio_files;
     in property <float> file_duration <=> main_ui.file_duration;
     in-out property <bool> is_playing <=> main_ui.is_playing;
     in-out property <string> selected_file <=> main_ui.selected_file;
@@ -202,6 +387,13 @@ export component MainWindow inherits Window {
 
     in-out property slider_pos <=> main_ui.slider_pos;
     out property <bool> slider_pressed <=> main_ui.slider_pressed;
+
+    // VISUALIZER VARIABLES
+    callback generate_spectrogram <=> main_ui.generate_spectrogram;
+
+    in property <[string]> vis_audio_files <=> main_ui.vis_audio_files;
+    in property <image> vis_source <=> main_ui.vis_source;
+    in-out property <bool> vis_loading <=> main_ui.vis_loading;
 
     callback close_menu(menu: int);
 

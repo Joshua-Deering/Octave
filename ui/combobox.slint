@@ -4,18 +4,17 @@ export component ComboBox {
     in property <color> text_color;
 
     in property <[string]> options;
-    in-out property <int> current-index;
-    in-out property <string> current-value;
+    property <int> current_index: -1;
+    property <string> current_value: "";
 
     in property <bool> enabled: true;
 
-    callback selected();
+    callback selected(string);
     
     min-width: 100px;
     min-height: 20px;
 
     Rectangle {
-
         background: root.background;
 
         border-radius: 5px;
@@ -25,7 +24,7 @@ export component ComboBox {
             spacing: 5px;
             padding: 5px;
             Text {
-                text: current-value;
+                text: root.current_value;
                 color: root.text_color;
                 wrap: no-wrap;
             }
@@ -64,15 +63,15 @@ export component ComboBox {
                     background: popup_ta.pressed ? root.background.darker(50%) : popup_ta.has-hover ? root.background.darker(-20%) : root.background.darker(10%);
 
                     Text {
-                        text: (root.current-index == i ? "✓  " : "") + opt + (root.current-index == i ? "  " : "");
+                        text: (root.current_index == i ? "✓  " : "") + opt + (root.current_index == i ? "  " : "");
                         horizontal-alignment: center;
                         color: root.text_color;
                     }
                     popup_ta := TouchArea {
                         clicked => {
-                            root.current-index = i;
-                            root.current-value = opt;
-                            root.selected();
+                            root.current_index = i;
+                            root.current_value = opt;
+                            root.selected(opt);
                         }
                     }
                 }

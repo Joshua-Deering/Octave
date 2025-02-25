@@ -32,7 +32,7 @@ pub fn logspace(min: f32, max: f32, num_points: usize) -> impl Iterator<Item = f
 }
 
 #[allow(unused)]
-pub fn hue_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
+pub fn hue_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
     let c = v * s;
     let h = h / 60.;
     let x = c * (1. - f32::abs(h % 2. - 1.));
@@ -54,11 +54,11 @@ pub fn hue_to_rgb(h: f32, s: f32, v: f32) -> [u8; 3] {
         rgb1 = (c, 0., x);
     }
 
-    [
+    (
         ((rgb1.0 + m) * 255.) as u8,
         ((rgb1.1 + m) * 255.) as u8,
         ((rgb1.2 + m) * 255.) as u8,
-    ]
+    )
 }
 
 //pub fn read_stdin_bool() -> bool {

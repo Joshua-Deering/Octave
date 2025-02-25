@@ -1,0 +1,39 @@
+
+export component LoadingSpinner {
+    in property <length> radius: 15px;
+
+    width: 2 * radius;
+    height: 2 * radius;
+
+    property <angle> fast_angle: mod(animation-tick() / 0.75s * 360deg, 1440deg);
+    property <angle> slow_angle: mod(animation-tick() / 1.5s * 360deg, 720deg);
+    property <bool> long_arc: (fast_angle >= 360deg && fast_angle < 1080deg);
+
+    property <bool> sweep: fast_angle >= 720deg;
+
+
+    Rectangle {
+        Path {
+            viewbox-width: root.width / 1px;
+            viewbox-height: root.height / 1px;
+            viewbox-x: 0;
+            viewbox-y: 0;
+
+            stroke-width: 2.5px;
+            stroke: white;
+
+            MoveTo {
+                x: root.width / 2px + sin(root.slow_angle + 180deg) * root.radius / 1px;
+                y: root.height / 2px + cos(root.slow_angle + 180deg) * root.radius / 1px;
+            }
+            ArcTo {
+                radius-x: root.radius / 1px;
+                radius-y: root.radius / 1px;
+                large-arc: root.long_arc;
+                sweep: root.sweep;
+                x: root.width / 2px + sin(root.fast_angle + 180deg) * root.radius / 1px;
+                y: root.height / 2px + cos(root.fast_angle + 180deg) * root.radius / 1px;
+            }
+        }
+    }
+}

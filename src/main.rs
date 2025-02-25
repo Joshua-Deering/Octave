@@ -18,13 +18,14 @@ mod parametric_eq;
 //use std::time::Duration;
 //use std::{thread, thread::sleep};
 
+use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
 use util::*;
-use file_io::read_wav_meta;
-use img_generator::{generate_eq_response, generate_waveform};
+use file_io::{read_data, read_wav_meta};
+use img_generator::{generate_eq_response, generate_waveform, generate_spectrogram_img};
 use players::AudioPlayer;
 use parametric_eq::ParametricEq;
 
-use slint::{run_event_loop, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
+use slint::{run_event_loop, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel};
 use cpal::{traits::{DeviceTrait, HostTrait}, SampleRate};
 
 use std::fs::File;
@@ -32,6 +33,7 @@ use std::cell::RefCell;
 use std::io::BufReader;
 use std::rc::Rc;
 use std::sync::{Mutex, Arc};
+use std::thread;
 
 slint::include_modules!();
 
@@ -79,7 +81,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 let model_rc = Rc::new(VecModel::from(supported_files));
-                main_window.set_audio_files(ModelRc::from(model_rc.clone()));
+                main_window.set_player_audio_files(ModelRc::from(model_rc.clone()));
+
+                main_window.set_selected_file("".into());
+            },
+            1 => {
+                let files: Vec<SharedString> = query_directory("./res/audio/")
+                    .into_iter()
+                    .map(|e| SharedString::from(e))
+                    .collect();
+
+                let model_rc = Rc::new(VecModel::from(files));
+                main_window.set_vis_audio_files(ModelRc::from(model_rc.clone()));
 
                 main_window.set_selected_file("".into());
             },
@@ -202,6 +215,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let main_window = file_sel_ptr.upgrade().unwrap();
             let file_dur = audio_player_ref.borrow().as_ref().unwrap().duration;
             main_window.set_file_duration(file_dur);
+        });
+    }
+
+    // Spectrogram Generation --------------------------------------------------
+    {
+        let window_weak = main_window.as_weak();
+        main_window.on_generate_spectrogram(move |file: SharedString, imgx: f32, imgy: f32, window_size: i32, window_overlap: f32, window_type: SharedString| {
+            let main_window = window_weak.clone();
+            
+            thread::spawn(move || {
+                let mut reader = BufReader::new(File::open(format!("./res/audio/{}", file)).unwrap());
+                let file_info = read_wav_meta(&mut reader);
+                let file_dur = file_info.audio_duration;
+                let sample_rate = file_info.sample_rate;
+
+                let samples = read_data(&mut reader, file_info, 0., file_dur).unwrap();
+                let window_func = WindowFunction::from_str(window_type.as_str()).unwrap();
+                
+                let stdft = do_short_time_fourier_transform(&samples[0], sample_rate, window_size as f32 / 1000., window_overlap / 100., window_func);
+                let num_dfts = stdft.len() as u32;
+                let num_freqs = stdft[0].len() as u32;
+                let stdft_data = ShortTimeDftData::new(stdft, window_func, window_overlap / 100., num_dfts, num_freqs, sample_rate);
+                let img = generate_spectrogram_img(imgx as u32, imgy as u32, stdft_data);
+                
+                main_window.upgrade_in_event_loop(move |handle| {
+                    handle.set_vis_source(Image::from_rgba8(img));
+                    handle.set_vis_loading(false);
+                }).unwrap();
+            });
         });
     }
 

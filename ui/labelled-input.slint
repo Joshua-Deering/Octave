@@ -1,0 +1,30 @@
+import { NumInput } from "./num-input.slint";
+
+export component LabelledInput {
+    in property <string> label;
+    in property <string> units;
+    in-out property <int> value;
+
+    in property <color> text_color;
+    in property <color> input_background;
+
+    HorizontalLayout {
+        alignment: center;
+        Text {
+            text: "Window Size: ";
+            color: root.text_color;
+        }
+        inp := NumInput {
+            background: root.input_background;
+            text-color: root.text_color;
+            value: root.value;
+            changed value => {
+                root.value = self.value;
+            }
+        }
+        Text {
+            text: " " + root.units;
+            color: root.text_color;
+        }
+    }
+}

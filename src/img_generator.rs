@@ -3,7 +3,7 @@ use std::{io::BufReader, fs::File};
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 
-use crate::{/*audio::ShortTimeDftData, */file_io::{read_data, read_wav_meta}, util::logspace, ParametricEq/*, hue_to_rgb*/};
+use crate::{audio::ShortTimeDftData, file_io::{read_data, read_wav_meta}, ParametricEq, util::hue_to_rgb};
 
 pub fn generate_waveform(audio_file: SharedString, imgx: f32, imgy: f32) -> Image {
     if audio_file.trim().is_empty() {
@@ -114,65 +114,67 @@ pub fn generate_eq_response(
     (format!("M {} {} ", freq_to_x(min_freq), gain_to_y(eq_points[0].1)) + svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()).into()
 }
 
-//pub fn generate_spectrogram_img(
-//    target_dir: String,
-//    imgx: u32,
-//    imgy: u32,
-//    stdft: ShortTimeDftData,
-//) -> Result<(), image::ImageError> {
-//    let num_dfts = stdft.num_dfts;
-//    let num_freq = stdft.num_freq;
-//
-//    let x_scale = num_dfts as f32 / imgx as f32;
-//    let y_scale = num_freq as f32 / imgy as f32;
-//
-//    let max_amplitude = find_max_amplitude(&stdft);
-//
-//    let mut imgbuf = RgbImage::new(imgx, imgy);
-//    let mut written_px = vec![vec![false; imgx as usize]; imgy as usize];
-//
-//    for input_y in 0..num_freq {
-//        for input_x in 0..num_dfts {
-//            let x = (input_x as f32 / x_scale).floor() as u32;
-//            let y = (input_y as f32 / y_scale).floor() as u32;
-//
-//            if !written_px[y as usize][x as usize] {
-//                imgbuf.put_pixel(x, y, *Rgb::from_slice(&rgb_from_range(stdft.dft_data[input_x as usize][stdft.num_freq as usize - input_y as usize - 1].amplitude, max_amplitude)));
-//                written_px[y as usize][x as usize] = true;
-//            } else { //if we have already written to this pixel, blend between the two rgb values
-//                let cur_px = rgb_from_range(stdft.dft_data[input_x as usize][stdft.num_freq as usize - input_y as usize - 1].amplitude, max_amplitude);
-//                let other_px = imgbuf.get_pixel(x, y).channels();
-//                imgbuf.put_pixel(x, y, *Rgb::from_slice(&blend_rgb(&cur_px, &other_px)));
-//            }
-//        }
-//    }
-//
-//    imgbuf.save(target_dir)
-//}
-//
-//fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
-//    let mut max = 0.;
-//    for dft in &stdft.dft_data {
-//        for freq_data in dft {
-//            if freq_data.amplitude.abs() > max {
-//                max = freq_data.amplitude.abs();
-//            }
-//        }
-//    }
-//    max
-//}
-//
-//fn blend_rgb(col1: &[u8], col2: &[u8]) -> [u8; 3] {
-//    [
-//        ((col1[0] as u32 + col2[0] as u32) / 2) as u8,
-//        ((col1[1] as u32 + col2[1] as u32) / 2) as u8,
-//        ((col1[2] as u32 + col2[2] as u32) / 2) as u8,
-//    ]
-//}
-//
-//fn rgb_from_range(amplitude: f32, max_amplitude: f32) -> [u8; 3] {
-//    let amp_scaled = f32::powf(amplitude / max_amplitude, 0.3);
-//    let col_val = (amp_scaled * 360. + 200.) % 360.;
-//
-//    hue_to_rgb(col_val, 0.8, 1.)
-//}
+pub fn generate_spectrogram_img(
+    imgx: u32,
+    imgy: u32,
+    stdft: ShortTimeDftData,
+) -> SharedPixelBuffer<Rgba8Pixel> {
+    let num_dfts = stdft.num_dfts;
+    let num_freq = stdft.num_freq;
+
+    let x_scale = num_dfts as f32 / imgx as f32;
+    let y_scale = num_freq as f32 / imgy as f32;
+
+    let max_amplitude = find_max_amplitude(&stdft);
+
+    let mut img = SharedPixelBuffer::new(imgx, imgy);
+    let imgbuf = img.make_mut_slice();
+    let mut written_px = vec![vec![false; imgx as usize]; imgy as usize];
+
+    for input_y in 0..num_freq {
+        for input_x in 0..num_dfts {
+            let x = (input_x as f32 / x_scale).floor() as u32;
+            let y = (input_y as f32 / y_scale).floor() as u32;
+
+            if !written_px[y as usize][x as usize] {
+                let (r, g, b) = rgb_from_range(stdft.dft_data[input_x as usize][stdft.num_freq as usize - input_y as usize - 1].amplitude, max_amplitude);
+                imgbuf[(y * imgx + x) as usize] = Rgba8Pixel::new(r, g, b, 255);
+                written_px[y as usize][x as usize] = true;
+            } else { //if we have already written to this pixel, blend between the two rgb values
+                let cur_col = rgb_from_range(stdft.dft_data[input_x as usize][stdft.num_freq as usize - input_y as usize - 1].amplitude, max_amplitude);
+                let other_col: (u8, u8, u8) = imgbuf[(y * imgx + x) as usize].rgb().into();
+                let blended = blend_rgb(cur_col, other_col);
+                imgbuf[(y * imgx + x) as usize] = Rgba8Pixel::new(blended.0, blended.1, blended.2, 255);
+            }
+        }
+    }
+
+    img
+}
+
+fn find_max_amplitude(stdft: &ShortTimeDftData) -> f32 {
+    let mut max = 0.;
+    for dft in &stdft.dft_data {
+        for freq_data in dft {
+            if freq_data.amplitude.abs() > max {
+                max = freq_data.amplitude.abs();
+            }
+        }
+    }
+    max
+}
+
+fn blend_rgb(col1: (u8, u8, u8), col2: (u8, u8, u8)) -> (u8, u8, u8) {
+    (
+        ((col1.0 as u32 + col2.0 as u32) / 2) as u8,
+        ((col1.1 as u32 + col2.1 as u32) / 2) as u8,
+        ((col1.2 as u32 + col2.2 as u32) / 2) as u8,
+    )
+}
+
+fn rgb_from_range(amplitude: f32, max_amplitude: f32) -> (u8, u8, u8) {
+    let amp_scaled = f32::powf(amplitude / max_amplitude, 0.3);
+    let col_val = (amp_scaled * 360. + 200.) % 360.;
+
+    hue_to_rgb(col_val, 0.8, 1.)
+}

@@ -4,13 +4,18 @@ export component Button {
     in property <string> text;
 
     callback clicked();
+
+    min-width: text_display.min-width;
+    min-height: text_display.min-height;
+    preferred-width: text_display.min-width + 10px;
+    preferred-height: text_display.min-height + 10px;
     
     Rectangle {
         width: 100%;
         height: 100%;
         background: ta.pressed ? root.background.darker(50%) : ta.has-hover ? root.background.darker(-10%) : root.background;
         border-radius: 5px;
-        Text {
+        text_display := Text {
             horizontal-alignment: center;
             vertical-alignment: center;
             text: root.text;

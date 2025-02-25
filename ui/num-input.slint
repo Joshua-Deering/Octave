@@ -1,0 +1,41 @@
+
+export component NumInput {
+    in-out property <int> value;
+    
+    in property <color> background;
+    in property <color> text-color;
+
+    width: r.width;
+    height: r.height;
+
+    r := Rectangle {
+        background: root.background;
+        border-radius: 4px;
+        width: te.preferred-width + 8px;
+        height: te.preferred-height + 2px;
+        te := TextInput {
+            x: 4px;
+            y: 1px;
+            text: root.value;
+            color: root.text-color;
+            key-released(event) => {
+                if (event.text == Key.Escape) {
+                    self.clear-focus();
+                    self.text = root.value;
+                }
+                if (event.text == Key.Return) {
+                    self.clear-focus();
+                }
+                return accept;
+            }
+            accepted => {
+                if (!self.text.is-float() || self.text.to-float() <= 0) {
+                    self.text = root.value;
+                } else {
+                    root.value = self.text.to-float().floor();
+                    self.text = root.value;
+                }
+            }
+        }
+    }
+}
