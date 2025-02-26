@@ -235,7 +235,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let stdft = do_short_time_fourier_transform(&samples[0], sample_rate, window_size as f32 / 1000., window_overlap / 100., window_func);
                 let num_dfts = stdft.len() as u32;
                 let num_freqs = stdft[0].len() as u32;
-                let stdft_data = ShortTimeDftData::new(stdft, window_func, window_overlap / 100., num_dfts, num_freqs, sample_rate);
+                let stdft_data = ShortTimeDftData::new(stdft, num_dfts, num_freqs, sample_rate);
                 let img = generate_spectrogram_img(imgx as u32, imgy as u32, stdft_data);
                 
                 main_window.upgrade_in_event_loop(move |handle| {
