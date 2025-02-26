@@ -25,5 +25,6 @@ Audio Playback Menu:
 Visualization Menu (with spectrogram generated):
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/ff84e172-fd47-480b-80e7-644866bec7ba" />
 Real-Time Analyzer:
-![RTA Demo](https://github.com/user-attachments/assets/e86b1476-56fa-4529-96e9-ebb177c12937)
+![RTA Demo](https://github.com/user-attachments/assets/0a2ef5ac-5a71-4bb9-87c7-a51ba76d07fc)
+
 
