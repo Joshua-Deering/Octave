@@ -1,26 +1,9 @@
-use std::{f32::consts::{PI, TAU}, fmt, mem::size_of_val};
-use fastapprox::fast;
+use std::{fmt, mem::size_of_val};
 
-use crate::fft::{create_dft, DftType};
-
-#[allow(unused)]
-pub fn generate_signal(freq_data: &Vec<FreqData>, sample_rate: usize, duration: f32) -> Vec<f32> {
-    let mut samples = vec![0.; (sample_rate as f32 * duration) as usize];
-    for i in 0..samples.len() {
-        let time = i as f32 / sample_rate as f32;
-        for f in freq_data {
-            let mut angle = (TAU * time * f.frequency as f32) + f.phase;
-            angle = ((angle + PI) % TAU) - PI;
-            samples[i] += fast::cos(angle) * f.amplitude;
-        }
-    }
-    samples
-}
+use crate::fft::Fft;
 
 pub struct ShortTimeDftData {
     pub dft_data: Vec<Vec<FreqData>>,
-    pub window_type: WindowFunction,
-    pub overlap: f32,
     pub num_dfts: u32,
     pub num_freq: u32,
     pub sample_rate: u32,
@@ -28,12 +11,9 @@ pub struct ShortTimeDftData {
 }
 
 impl ShortTimeDftData {
-    pub fn new(dft_data: Vec<Vec<FreqData>>, window_type: WindowFunction, overlap: f32, num_dfts: u32, num_freq: u32, sample_rate: u32) -> Self {
+    pub fn new(dft_data: Vec<Vec<FreqData>>, num_dfts: u32, num_freq: u32, sample_rate: u32) -> Self {
         let data_size = (size_of_val(&dft_data[0][0]) as u32 * num_dfts * num_freq) as usize + (size_of::<u32>() * 4);
-        Self { dft_data, window_type, overlap, num_dfts, num_freq, sample_rate, data_size }
-    }
-    pub fn new_with_size(dft_data: Vec<Vec<FreqData>>, window_type: WindowFunction, overlap: f32, num_dfts: u32, num_freq: u32, sample_rate: u32, data_size: usize) -> Self {
-        Self { dft_data, window_type, overlap, num_dfts, num_freq, sample_rate, data_size }
+        Self { dft_data, num_dfts, num_freq, sample_rate, data_size }
     }
 }
 
@@ -49,7 +29,7 @@ pub fn do_short_time_fourier_transform(samples: &Vec<f32>, sample_rate: u32, win
     let step_size = samples_per_window - overlap_size;
     let num_windows = samples.len() / (samples_per_window - overlap_size);
 
-    let dft = create_dft(Some(DftType::FFT), sample_rate, samples_per_window, window_func);
+    let dft = Fft::new(sample_rate, samples_per_window, window_func);
     
     let mut out: Vec<Vec<FreqData>> = vec![vec![]; num_windows];
     let mut window_idx = 0;

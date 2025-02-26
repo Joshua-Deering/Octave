@@ -1,0 +1,128 @@
+
+export component LogGraph {
+    in property <float> min_freq;
+    in property <float> max_freq;
+    in property <[float]> key_freqs;
+    in property <[float]> minor_freqs;
+    
+    in property <float> left_axis_min;
+    in property <float> left_axis_max;
+    in property <[float]> left_axis_key_points;
+    in property <bool> left_axis_is_centered;
+
+    in property <float> right_axis_min;
+    in property <float> right_axis_max;
+    in property <[float]> right_axis_key_points;
+    in property <bool> right_axis_is_centered;
+
+    in property <string> right_axis_label;
+    in property <string> right_axis_units;
+    in property <string> left_axis_label;
+    in property <string> left_axis_units;
+
+    in property <color> background;
+    in property <color> major_line_color;
+    in property <color> minor_line_color;
+    in property <color> label_color;
+    in property <color> border_color;
+
+    width: 100%;
+    height: 100%;
+
+    pure function freq_to_x(
+        freq: float,
+    ) -> length {
+        ((log(freq, 10)-log(root.min_freq, 10))/(log(root.max_freq, 10)-log(root.min_freq, 10))) * root.width;
+    }
+
+    pure function x_to_freq(
+        x: length,
+    ) -> float {
+        Math.pow(10, log(root.min_freq, 10) + (x / root.width) * (log(root.max_freq, 10) - log(root.min_freq, 10)))
+    }
+
+    pure function right_axis_to_y(
+        val: float,
+    ) -> length {
+        if (right_axis_is_centered) {
+            return (root.height / 2) - (val / (root.right_axis_max - root.right_axis_min) * root.height);
+        } else {
+            return root.height - ((val - root.right_axis_min) / (root.right_axis_max - root.right_axis_min) * root.height);
+        }
+    }
+
+    pure function left_axis_to_y(
+        val: float,
+    ) -> length {
+        if (left_axis_is_centered) {
+            return (root.height / 2) - (val / (root.left_axis_max - root.left_axis_min) * root.height);
+        } else {
+            return root.height - ((val - root.left_axis_min) / (root.left_axis_max - root.left_axis_min) * root.height);
+        }
+    }
+
+    Rectangle {
+        background: root.background;
+        border-color: root.border_color;
+        border-width: 1px;
+
+        for f in key_freqs: Rectangle {
+            width: 1px;
+            height: root.height;
+            x: freq_to_x(f);
+            y: 0;
+            background: major_line_color;
+        }
+        for f in minor_freqs: Rectangle {
+            width: 1px;
+            height: root.height;
+            x: freq_to_x(f);
+            y: 0;
+            background: minor_line_color;
+        }
+        for f in key_freqs: Text {
+            text: f >= 1000 ? (f / 1000) + "k" : f;
+            x: freq_to_x(f) + 2px;
+            y: right_axis_to_y(root.right_axis_min) - self.height;
+            color: label_color;
+        }
+
+        for n in right_axis_key_points: Rectangle {
+            width: root.width;
+            height: 1px;
+            x: 0;
+            y: right_axis_to_y(n);
+            background: major_line_color;
+        }
+        for n in right_axis_key_points: Text {
+            text: n;
+            x: freq_to_x(root.max_freq) - self.width - 2px;
+            y: right_axis_to_y(n) - self.height;
+            color: label_color;
+        }
+
+        // no grid lines for left axis, but labels are added
+        for n in left_axis_key_points: Text {
+            text: n;
+            x: 2px;
+            y: left_axis_to_y(n) - self.height;
+            color: label_color;
+        }
+
+        Text {
+            text: left_axis_label;
+            color: label_color;
+            font-size: 15px;
+            x: 2px;
+            y: 2px;
+        }
+
+        Text {
+            text: right_axis_label;
+            color: label_color;
+            font-size: 15px;
+            x: root.width - self.width - 2px;
+            y: 2px;
+        }
+    }
+}

@@ -5,23 +5,13 @@ mod img_generator;
 mod players;
 mod util;
 mod parametric_eq;
-//
-//use audio::WindowFunction;
-//use file_io::{read_data, read_stdft_from_file, read_wav_meta, write_stdft_to_file, WavInfo};
-//use img_generator::{generate_spectrogram_img, generate_waveform_img};
-//use players::{FilePlayer, Play, SignalPlayer};
-
-//use core::f32;
-//use std::fs::File;
-//use std::io::{stdin, BufReader};
-//use std::sync::{Arc, Mutex};
-//use std::time::Duration;
-//use std::{thread, thread::sleep};
+mod rta;
 
 use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
+use rta::ExternalRta;
 use util::*;
 use file_io::{read_data, read_wav_meta};
-use img_generator::{generate_eq_response, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
+use img_generator::{generate_eq_response, generate_rta_line, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
 use players::AudioPlayer;
 use parametric_eq::ParametricEq;
 
@@ -47,9 +37,10 @@ slint::include_modules!();
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let main_window = MainWindow::new()?;
 
-
     let player: Rc<RefCell<Option<AudioPlayer>>> = Rc::new(RefCell::new(None));
     let player_eq = Arc::new(Mutex::new(ParametricEq::new(vec![], 48000)));
+
+    let rta: Rc<RefCell<Option<ExternalRta>>> = Rc::new(RefCell::new(None));
 
     // UI Initialization Logic (called when any menu is opened) ----------------
     let init_ptr = main_window.as_weak();
@@ -100,20 +91,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // UI Closure logic (called when any menu is closed) -----------------------
-    let close_menu_player_ptr = Rc::clone(&player);
-    let close_menu_window_ptr = main_window.as_weak();
-    main_window.on_close_menu(move | menu: i32 | {
-        let main_window = close_menu_window_ptr.upgrade().unwrap();
-        match menu {
-            0 => { 
-                *close_menu_player_ptr.borrow_mut() = None;
-                main_window.set_slider_pos(0.);
-                main_window.set_is_playing(false);
-                main_window.set_selected_file("".into());
+    {
+        let close_menu_player_ptr = Rc::clone(&player);
+        let close_menu_window_ptr = main_window.as_weak();
+        let rta_clone = Rc::clone(&rta);
+        main_window.on_close_menu(move | menu: i32 | {
+            let main_window = close_menu_window_ptr.upgrade().unwrap();
+            match menu {
+                0 => { 
+                    *close_menu_player_ptr.borrow_mut() = None;
+                    main_window.set_slider_pos(0.);
+                    main_window.set_is_playing(false);
+                    main_window.set_selected_file("".into());
+                },
+                2 => {
+                    *rta_clone.borrow_mut() = None;
+                }
+                _ => {}
             }
-            _ => {}
-        }
-    });
+        });
+    }
 
     // Audio Playback Stop/Start Logic -----------------------------------------
     {
@@ -152,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Draw Eq Image
     main_window.on_request_eq_response(move | 
         eq_nodes: ModelRc<NodeData>,
-        low_freq_bound: f32, high_freq_bound: f32,
+        min_freq: f32, max_freq: f32,
         min_gain: f32, max_gain: f32,
         imgx: f32, imgy: f32 | {
         let mut drawn_eq = ParametricEq::new(vec![], 48000);
@@ -162,7 +159,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        generate_eq_response(&drawn_eq, low_freq_bound, high_freq_bound, min_gain, max_gain, imgx as u32, imgy as u32)
+        generate_eq_response(&drawn_eq, min_freq, max_freq, min_gain, max_gain, imgx as u32, imgy as u32)
     });
 
     // Set audio player EQ
@@ -208,10 +205,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let audio_player_ref = Rc::clone(&player);
         let file_sel_ptr = main_window.as_weak();
-        let player_eq_ptr_fs = Arc::clone(&player_eq);
+        let player_eq_ptr = Arc::clone(&player_eq);
         main_window.on_file_select(move |file: SharedString| {
-
-            *audio_player_ref.borrow_mut() = Some(AudioPlayer::new(file.into(), Arc::clone(&player_eq_ptr_fs)));
+            *audio_player_ref.borrow_mut() = Some(AudioPlayer::new(file.into(), Arc::clone(&player_eq_ptr)));
             let main_window = file_sel_ptr.upgrade().unwrap();
             let file_dur = audio_player_ref.borrow().as_ref().unwrap().duration;
             main_window.set_file_duration(file_dur);
@@ -250,7 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // Waveform Generation --------------------------------------------------
+    // Waveform Generation -----------------------------------------------------
     {
         let window_weak = main_window.as_weak();
         main_window.on_generate_waveform(move |file: SharedString, imgx: f32, imgy: f32| {
@@ -273,332 +269,70 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+
+    // Start RTA ---------------------------------------------------------------
+    {
+        let rta_clone = Rc::clone(&rta);
+        main_window.on_start_rta(move |_rta_type: SharedString, rta_response: SharedString| {
+            let new_cache_size = match rta_response.as_str() {
+                "Fast" => {6000},
+                "Medium" => {24000},
+                "Slow" => {48000},
+                _ => {6000},
+            };
+
+            let mut rta = rta_clone.borrow_mut();
+            let mut new_rta = false;
+
+            if let Some(active_rta) = rta.as_mut() {
+                if active_rta.cache_size != new_cache_size {
+                    new_rta = true;
+                } else {
+                    active_rta.start();
+                }
+            } else {
+                new_rta = true;
+            }
+            if new_rta {
+                *rta = Some(ExternalRta::new(new_cache_size));
+                rta.as_mut().unwrap().start();
+            }
+        });
+    }
+
+    // Stop RTA ---------------------------------------------------------------
+    {
+        let rta_clone = Rc::clone(&rta);
+        main_window.on_stop_rta(move || {
+            let mut rta = rta_clone.borrow_mut();
+            if let Some(active_rta) = rta.as_mut() {
+                active_rta.stop();
+            }
+        });
+    }
+
+    // Generate RTA SVG Path ---------------------------------------------------
+    {
+        let rta_clone = Rc::clone(&rta);
+        main_window.on_req_rta_img(move |
+            imgx: f32, imgy: f32, 
+            min_freq: f32, max_freq: f32,
+            min_level: f32, max_level: f32,
+            octave_bandwidth: f32| {
+                let mut rta = rta_clone.borrow_mut();
+                if let Some(active_rta) = rta.as_mut() {
+                    let fft = active_rta.get_fft();
+
+                    generate_rta_line(imgx as u32, imgy as u32, min_freq, max_freq, min_level, max_level, octave_bandwidth, fft)
+                } else {
+                    //if no active rta, return empty image
+                    SharedString::new()
+                }
+        });
+    }
+
     main_window.show()?;
     run_event_loop()?;
 
-    //let menu_options = vec![
-    //    MenuOption::new("Play Audio", || play_audio_menu()),
-    //    MenuOption::new("Perform Short-Time DFT", || do_stdft_menu()),
-    //    MenuOption::new("Create Spectrogram", || create_spectrogram_menu()),
-    //    MenuOption::new("Create Waveform", || create_waveform_menu()),
-    //];
-    //
-    //let mut menu = Menu::new(
-    //    menu_options,
-    //    MenuProps {
-    //        title: ".Wav Parser",
-    //        exit_on_action: false,
-    //        message: "<esc> to close",
-    //        ..menu_default_with_colors()
-    //    },
-    //);
-    //
-    //menu.show();
-
     Ok(())
 }
-
-//fn do_stdft(file_choice: &str) {
-//    //clear the console output
-//    print!("{}[2J", 27 as char);
-//
-//    let f = File::open(format!("./res/audio/{}", file_choice)).expect("Failed to open file!");
-//    let mut reader = BufReader::new(f);
-//    let file_info = file_io::read_wav_meta(&mut reader);
-//    let sample_rate = file_info.sample_rate;
-//    let channels = file_info.channels;
-//
-//    println!("Enter the start point of the Short-Time DFT (seconds)");
-//    let start = read_stdin_f32(0., f32::MAX);
-//    println!("Enter the duration of the Short-Time DFT (seconds)");
-//    let duration = read_stdin_f32(f32::EPSILON, f32::MAX);
-//    println!("Enter the window size (duration of each DFT)");
-//    let window_size = read_stdin_f32(f32::EPSILON, duration);
-//    println!("Enter the window overlap (percent, up to 90%)");
-//    let overlap = read_stdin_usize(0, 90);
-//    println!("Enter which window function to use: (0: Square, 1: Hann)");
-//    let window_func = WindowFunction::from(read_stdin_usize(0, 1));
-//    println!(
-//        "Should the stdft be done on all {} channels of the file? (y/n)",
-//        channels
-//    );
-//    let channel_choice;
-//    let num_ch;
-//    if read_stdin_bool() {
-//        channel_choice = 0..=(channels as usize - 1);
-//        num_ch = channels;
-//    } else {
-//        println!(
-//            "Which channel should the stdft be done on? (0-{})",
-//            channels
-//        );
-//        let choice = read_stdin_usize(0, channels as usize - 1);
-//        channel_choice = choice..=choice;
-//        num_ch = 1;
-//    }
-//    println!("Enter the filename for the resulting Short-Time DFT (without the extension)");
-//    let mut dest_file = String::new();
-//    stdin().read_line(&mut dest_file).unwrap();
-//
-//    let signal = read_data(&mut reader, file_info, start, duration).unwrap();
-//    let original_signal = SignalPlayer::new(signal, sample_rate, channels as usize);
-//
-//    println!("Starting {} Short-Time DFTs...\n------", num_ch);
-//    for i in channel_choice {
-//        println!("Performing Short-Time DFT #{}...", i);
-//        let stdft = original_signal.do_short_time_fourier_transform(
-//            window_size,
-//            overlap as f32 / 100.,
-//            window_func,
-//            i,
-//        );
-//        println!("Short-Time DFT #{} Complete!", i);
-//
-//        println!("Writing stdft #{} to File...", i);
-//        write_stdft_to_file(
-//            format!("./res/stdfts/{}_ch{}.stdft", dest_file.trim(), i),
-//            &stdft,
-//        );
-//        println!("Done #{}!", i);
-//    }
-//    println!("Done!");
-//    thread::sleep(Duration::from_millis(500));
-//}
-//
-//fn play_audio_menu() {
-//    let files = query_directory("./res/audio");
-//
-//    let mut menu_options: Vec<MenuOption> = vec![];
-//
-//    // todo: need to have some way of figuring out which sample rates i can use
-//    // and which files are possible to play based on that
-//    // then also provide functionality to resample files
-//    for file in files {
-//        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
-//            let mut r = BufReader::new(File::open(format!("./res/audio/{}", &file)).unwrap());
-//            let meta = read_wav_meta(&mut r);
-//            match meta.sample_type {
-//                1 => play_audio_direct(&file, meta),
-//                _ => play_audio_stream(meta, &mut r),
-//            }
-//        }));
-//    }
-//
-//    let mut audio_file_menu = Menu::new(
-//        menu_options,
-//        MenuProps {
-//            title: "Choose a File:",
-//            message: "<esc> to close",
-//            ..menu_default_with_colors()
-//        },
-//    );
-//    audio_file_menu.show();
-//}
-//
-//fn play_audio_stream(file_meta: WavInfo, reader: &mut BufReader<File>) {
-//    println!("Audio player starting");
-//    let signal_player = Arc::new(Mutex::new(SignalPlayer::new(
-//        read_data(reader, file_meta.clone(), 0., file_meta.audio_duration).unwrap(),
-//        file_meta.sample_rate,
-//        file_meta.channels as usize,
-//    )));
-//
-//    let host: Host = cpal::default_host();
-//    let device: Device = host
-//        .default_output_device()
-//        .expect("No audio output device available!");
-//
-//    let mut supported_stream_range = device
-//        .supported_output_configs()
-//        .expect("Error while querying output configs!");
-//    let supported_config: StreamConfig = supported_stream_range
-//        .find(|&e| e.max_sample_rate() == SampleRate(48000))
-//        .expect("No supported configs!")
-//        .with_sample_rate(SampleRate(48000))
-//        .config();
-//
-//    let signal_player_clone = Arc::clone(&signal_player);
-//    let stream = device
-//        .build_output_stream_raw(
-//            &supported_config,
-//            cpal::SampleFormat::F32,
-//            move |data: &mut Data, _: &OutputCallbackInfo| {
-//                signal_player_clone.lock().unwrap().next_chunk(data);
-//            },
-//            move |_err| {
-//                panic!("bad things happened");
-//            },
-//            None,
-//        )
-//        .unwrap();
-//    println!("Playing Audio...");
-//    stream.play().unwrap();
-//
-//    // keep track of whether the audio has finished playing on the current thread
-//    loop {
-//        if signal_player.lock().unwrap().finished == true {
-//            println!("Audio playback complete!");
-//
-//            sleep(Duration::from_millis(500));
-//            return;
-//        }
-//        sleep(Duration::from_millis(100));
-//    }
-//}
-//
-//fn play_audio_direct(file_path: &str, file_meta: WavInfo) {
-//    println!("Audio player starting");
-//    let file_player = Arc::new(Mutex::new(FilePlayer::new(file_path.into())));
-//
-//    let host: Host = cpal::default_host();
-//    let device: Device = host
-//        .default_output_device()
-//        .expect("No audio output device available!");
-//
-//    let mut supported_stream_range = device
-//        .supported_output_configs()
-//        .expect("Error while querying output configs!");
-//    let supported_config: StreamConfig = supported_stream_range
-//        .find(|&e| e.max_sample_rate() == SampleRate(48000))
-//        .expect("No supported configs!")
-//        .with_sample_rate(SampleRate(file_meta.sample_rate))
-//        .config();
-//
-//    let file_player_clone = Arc::clone(&file_player);
-//    let stream = device
-//        .build_output_stream_raw(
-//            &supported_config,
-//            cpal::SampleFormat::F32,
-//            move |data: &mut Data, _: &OutputCallbackInfo| {
-//                file_player_clone.lock().unwrap().next_chunk(data);
-//            },
-//            move |_err| {
-//                panic!("bad things happened");
-//            },
-//            None,
-//        )
-//        .unwrap();
-//    println!("Playing Audio...");
-//    stream.play().unwrap();
-//
-//    // keep track of whether the audio has finished playing on the current thread
-//    loop {
-//        if file_player.lock().unwrap().finished == true {
-//            println!("Audio playback complete!");
-//            return;
-//        }
-//        sleep(Duration::from_millis(1000));
-//    }
-//}
-//
-//fn create_spectrogram_menu() {
-//    let files = query_directory("./res/stdfts");
-//
-//    let mut menu_options: Vec<MenuOption> = vec![];
-//    for file in files {
-//        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
-//            generate_spectrogram(&file)
-//        }));
-//    }
-//
-//    let mut stdft_file_menu = Menu::new(
-//        menu_options,
-//        MenuProps {
-//            title: "Choose a File:",
-//            message: "<esc> to close",
-//            ..menu_default_with_colors()
-//        },
-//    );
-//    stdft_file_menu.show();
-//}
-//
-//fn generate_spectrogram(dir: &str) {
-//    print!("{}[2J", 27 as char);
-//
-//    println!("Enter the width of the image:");
-//    let imgx = read_stdin_u32();
-//    println!("Enter the height of the image:");
-//    let imgy = read_stdin_u32();
-//    println!("Enter the file name of the resulting image (without the extension)");
-//    let mut dest_file = String::new();
-//    stdin()
-//        .read_line(&mut dest_file)
-//        .expect("Failed to read input");
-//
-//    println!("Reading Data from file...");
-//    let stdft = read_stdft_from_file(("./res/stdfts/".to_string() + dir).as_str());
-//
-//    println!("Generating image...");
-//    generate_spectrogram_img(
-//        format!("./res/spectrograms/{}.png", dest_file.trim()),
-//        imgx,
-//        imgy,
-//        stdft,
-//    )
-//    .expect("Failed to save image!");
-//    println!("Done!");
-//    thread::sleep(Duration::from_millis(500));
-//}
-//
-//
-//fn create_waveform_menu() {
-//    let files = query_directory("./res/audio");
-//
-//    let mut menu_options: Vec<MenuOption> = vec![];
-//    for file in files {
-//        menu_options.push(MenuOption::new(file.clone().as_str(), move || {
-//            generate_waveform(&file)
-//        }));
-//    }
-//
-//    let mut stdft_file_menu = Menu::new(
-//        menu_options,
-//        MenuProps {
-//            title: "Choose a File:",
-//            message: "<esc> to close",
-//            ..menu_default_with_colors()
-//        },
-//    );
-//    stdft_file_menu.show();
-//}
-//
-//fn generate_waveform(dir: &str) {
-//    print!("{}[2J", 27 as char);
-//
-//    println!("Enter the width of the image:");
-//    let imgx = read_stdin_u32();
-//    println!("Enter the height of the image:");
-//    let imgy = read_stdin_u32();
-//    println!("Enter the file name of the resulting image (without the extension)");
-//    let mut dest_file = String::new();
-//    stdin()
-//        .read_line(&mut dest_file)
-//        .expect("Failed to read input");
-//
-//    let mut f =
-//        BufReader::new(File::open(format!("./res/audio/{}", dir)).expect("Failed to open file!"));
-//    let file_info = file_io::read_wav_meta(&mut f);
-//
-//    println!("Generating image...");
-//    generate_waveform_img(
-//        format!("./res/waveforms/{}.png", dest_file.trim()),
-//        imgx,
-//        imgy,
-//        read_data(&mut f, file_info.clone(), 0., file_info.audio_duration).unwrap(),
-//    )
-//    .unwrap();
-//
-//    println!("Done!");
-//    thread::sleep(Duration::from_millis(500));
-//}
-//
-//fn menu_default_with_colors() -> MenuProps<'static> {
-//    MenuProps {
-//        bg_color: 248,
-//        fg_color: 19,
-//        msg_color: Some(244),
-//        title_color: Some(17),
-//        selected_color: Some(21),
-//        ..MenuProps::default()
-//    }
-//}

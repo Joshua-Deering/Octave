@@ -3,7 +3,7 @@ use std::{io::BufReader, fs::File};
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 
-use crate::{audio::ShortTimeDftData, file_io::{read_data, read_wav_meta}, ParametricEq, util::hue_to_rgb};
+use crate::{audio::{FreqData, ShortTimeDftData}, file_io::{read_data, read_wav_meta}, util::hue_to_rgb, ParametricEq};
 
 pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32) -> Image {
     if audio_file.trim().is_empty() {
@@ -62,34 +62,54 @@ pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32)
     Image::from_rgba8(shared_buf)
 }
 
-//pub fn generate_waveform_img(
-//    target_dir: String,
-//    imgx: u32,
-//    imgy: u32,
-//    samples: Vec<Vec<f32>>, 
-//) -> Result<(), image::ImageError> {
-//    if samples.len() == 0 || samples[0].len() == 0 {
-//        return Ok(())
-//    }
-//    let channels = samples.len();
-//
-//    let x_scale = imgx as f32 / samples[0].len() as f32;
-//    let middle = (imgy / 2) as f32;
-//
-//    let mut imgbuf = RgbaImage::new(imgx, imgy);
-//
-//    for i in 0..samples[0].len() {
-//        let mut sum = 0.;
-//        for j in 0..channels {
-//            sum += samples[j][i];
-//        }
-//        sum /= channels as f32;
-//
-//        imgbuf.put_pixel(((i as f32 * x_scale).round() as u32).min(imgx - 1), (middle + sum * middle).round() as u32, *Rgba::from_slice(&[0u8, 255u8, 0u8, 255u8]));
-//    }
-//
-//    imgbuf.save(target_dir)
-//}
+pub fn generate_rta_line(
+    imgx: u32, imgy: u32,
+    min_freq: f32, max_freq: f32,
+    min_level: f32, max_level: f32,
+    octave_bandwidth: f32,
+    fft: Vec<FreqData>,
+) -> SharedString {
+    let num_octaves = (max_freq - min_freq).log2();
+    let total_bands = (num_octaves / octave_bandwidth).ceil() as usize;
+    let band_multiplier = 2f32.powf(octave_bandwidth);
+
+    let mut bins = vec![];
+
+    let mut low_bound = min_freq;
+    let mut cur_bin = 0;
+    let mut fft_i = 0;
+    while low_bound < max_freq {
+        let mut bin_sum = 0.;
+        let upper_bound = low_bound * band_multiplier;
+
+        while fft_i < fft.len() && fft[fft_i].frequency < upper_bound  {
+            bin_sum += fft[fft_i].amplitude;
+            fft_i += 1;
+        }
+
+        bins.push(((low_bound + upper_bound) / 2., 20. * bin_sum.log10()));
+        low_bound *= band_multiplier;
+        cur_bin += 1;
+
+        if fft_i >= fft.len() {
+            break;
+        }
+    }
+
+    let freq_to_x = | f: f32 | -> u32 {
+        ((f.log10() - min_freq.log10()) / (max_freq.log10() - min_freq.log10()) * imgx as f32) as u32
+    };
+    let level_to_y = | level: f32 | -> u32 {
+        ((imgy / 2) as f32 - (level - min_level) / (max_level - min_level) * imgy as f32) as u32
+    };
+
+    let mut svg_string_cmds = vec![(0, 0); bins.len()];
+    for i in 0..bins.len() {
+        svg_string_cmds[i] = (freq_to_x(bins[i].0), level_to_y(bins[i].1));
+    }
+
+    (format!("M 0 {}", imgy) + svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {}", x, y.min(imgy))).collect::<Vec<String>>().join("").as_str()).into()
+}
 
 pub fn generate_eq_response(
     param_eq: &ParametricEq,

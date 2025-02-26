@@ -1,5 +1,6 @@
 import { Button } from "std-widgets.slint";
 import { Palette } from "./colors.slint";
+import { LogGraph } from "./log-graph.slint";
 
 export struct NodeData {
     gain: float,
@@ -66,71 +67,30 @@ export component ParametricEq {
             height: 80%;
             background: Palette.primary;
 
-            //graph lines and labels
-            for f in key_freqs: Rectangle {
-                width: 1px;
+            LogGraph {
+                width: root.draw_area_width;
                 height: root.draw_area_height;
-                x: freq_to_x(f);
-                y: graph_margin;
-                background: Palette.secondary.transparentize(30%);
-            }
-            for f in minor_freqs: Rectangle {
-                width: 1px;
-                height: draw_area_height;
-                x: freq_to_x(f);
-                y: graph_margin;
-                background: Palette.secondary.transparentize(70%);
-            }
-            for f in key_freqs: Text {
-                text: f >= 1000 ? (f / 1000) + "k" : f;
-                x: freq_to_x(f) + 2px;
-                y: gain_to_y(root.min_gain) - self.height;
-                color: Palette.accent1;
+                x: root.graph_margin;
+                y: root.graph_margin;
+
+                min_freq: root.min_freq;
+                max_freq: root.max_freq;
+                key_freqs: root.key_freqs;
+                minor_freqs: root.minor_freqs;
+
+                right_axis_key_points: root.key_gains;
+                right_axis_min: root.min_gain;
+                right_axis_max: root.max_gain;
+                right_axis_is_centered: true;
+                right_axis_label: "Gain (dB)";
+                
+                major_line_color: Palette.secondary.transparentize(30%);
+                minor_line_color: Palette.secondary.transparentize(70%);
+                background: Palette.primary;
+                label_color: Palette.accent1;
+                border_color: Palette.secondary;
             }
 
-            for g in key_gains: Rectangle {
-                width: root.draw_area_width;
-                height: 1px;
-                x: graph_margin;
-                y: gain_to_y(g);
-                background: Palette.secondary.transparentize(30%);
-            }
-            for g in key_gains: Text {
-                text: g;
-                x: freq_to_x(root.max_freq) - self.width - 2px;
-                y: gain_to_y(g) - self.height;
-                color: Palette.accent1;
-            }
-
-            // eq border
-            Rectangle {
-                width: root.draw_area_width;
-                height: 1px;
-                x: graph_margin;
-                y: gain_to_y(root.max_gain);
-                background: Palette.secondary;
-            }
-            Rectangle {
-                width: root.draw_area_width;
-                height: 1px;
-                x: graph_margin;
-                y: gain_to_y(root.min_gain);
-                background: Palette.secondary;
-            }
-            Rectangle {
-                width: 1px;
-                height: root.draw_area_height;
-                x: freq_to_x(root.min_freq);
-                y: graph_margin;
-                background: Palette.secondary;
-            }
-            Rectangle {
-                width: 1px;
-                height: root.draw_area_height;
-                x: freq_to_x(root.max_freq);
-                y: graph_margin;
-                background: Palette.secondary;
-            }
 
             Path {
                 width: root.draw_area_width;

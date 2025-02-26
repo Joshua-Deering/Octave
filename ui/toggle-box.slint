@@ -1,0 +1,32 @@
+
+export component ToggleBox {
+    callback selected(string);
+    
+    in property <color> background;
+    in property <color> text_color;
+    in property <[string]> options;
+
+    in-out property <int> current_selection;
+    
+    Rectangle {
+        border-radius: 5px;
+        background: root.background;
+
+        Text {
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            text: root.options[root.current_selection];
+            color: root.text_color;
+        }
+
+        ta := TouchArea {
+            clicked => {
+                current_selection += 1;
+                if (current_selection >= options.length) {
+                    current_selection = 0;
+                }
+                selected(options[current_selection]);
+            }
+        }
+    }
+}

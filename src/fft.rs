@@ -2,29 +2,6 @@ use std::{f32::consts::{PI, TAU}, num::NonZero, ops::{Add, AddAssign, Div, Mul, 
 use fastapprox::fast;
 use crate::audio::{FreqData, WindowFunction};
 
-pub fn create_dft(dft_type: Option<DftType>, sample_rate: u32, buffer_size: usize, window_function: WindowFunction) -> Box<dyn DFT> {
-    // if dft_type is specified, just return that
-    if let Some(tp) = dft_type {
-        match tp {
-            DftType::NAIVE => return Box::new(NaiveDft::new(sample_rate, buffer_size, window_function)),
-            DftType::FFT => return Box::new(Fft::new(sample_rate, buffer_size, window_function)),
-        }
-    }
-    //otherwise, do some stuff to figure out which dft to use
-    Box::new(NaiveDft::new(sample_rate, buffer_size, window_function))
-}
-
-pub trait DFT {
-    // should panic if given the wrong size buffer (buffer.len != self.buffer_size)
-    fn process(&self, buffer: &[f32]) -> Vec<FreqData>;
-}
-
-#[allow(unused)]
-pub enum DftType {
-    NAIVE,
-    FFT
-}
-
 pub struct Fft {
     pub frequency_step: f32,
     pub buffer_size: usize,
@@ -135,10 +112,8 @@ impl Fft {
             len *= 2;
         }
     }
-}
 
-impl DFT for Fft {
-    fn process(&self, buffer: &[f32]) -> Vec<FreqData> {
+    pub fn process(&self, buffer: &[f32]) -> Vec<FreqData> {
         let mut complex_buffer = Vec::with_capacity(self.buffer_size);
         // convert real-valued inputs to complex inputs, and premultiply by the window function
         for i in 0..self.non_padded_buf_size {
@@ -164,6 +139,7 @@ impl DFT for Fft {
     }
 }
 
+#[allow(unused)]
 pub struct NaiveDft {
     pub frequency_step: f32,
     pub buffer_size: usize,
@@ -172,6 +148,7 @@ pub struct NaiveDft {
     available_threads: NonZero<usize>,
 }
 
+#[allow(unused)]
 impl NaiveDft {
     pub fn new(sample_rate: u32, buffer_size: usize, window_function: WindowFunction) -> Self {
         let frequency_step = sample_rate as f32 / buffer_size as f32;
@@ -202,10 +179,8 @@ impl NaiveDft {
             available_threads,
         }
     }
-}
 
-impl DFT for NaiveDft {
-    fn process(&self, buffer: &[f32]) -> Vec<FreqData> {
+    pub fn process(&self, buffer: &[f32]) -> Vec<FreqData> {
         assert!(buffer.len() == self.buffer_size);
         
         let mut frequencies = vec![FreqData::ZERO; self.num_frequencies];
