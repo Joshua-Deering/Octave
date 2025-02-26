@@ -69,14 +69,11 @@ pub fn generate_rta_line(
     octave_bandwidth: f32,
     fft: Vec<FreqData>,
 ) -> SharedString {
-    let num_octaves = (max_freq - min_freq).log2();
-    let total_bands = (num_octaves / octave_bandwidth).ceil() as usize;
     let band_multiplier = 2f32.powf(octave_bandwidth);
 
     let mut bins = vec![];
 
     let mut low_bound = min_freq;
-    let mut cur_bin = 0;
     let mut fft_i = 0;
     while low_bound < max_freq {
         let mut bin_sum = 0.;
@@ -89,7 +86,6 @@ pub fn generate_rta_line(
 
         bins.push(((low_bound + upper_bound) / 2., 20. * bin_sum.log10()));
         low_bound *= band_multiplier;
-        cur_bin += 1;
 
         if fft_i >= fft.len() {
             break;

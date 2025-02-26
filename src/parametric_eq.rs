@@ -18,9 +18,9 @@ impl ParametricEq {
         self.nodes = vec![];
     }
 
-    pub fn add_biquad(&mut self, node: Biquad) {
-        self.nodes.push(node);
-    }
+    //pub fn add_biquad(&mut self, node: Biquad) {
+    //    self.nodes.push(node);
+    //}
 
     pub fn add_node(&mut self, freq: u32, gain: f32, q: f32) {
         self.nodes.push(Biquad::new(freq, gain, q, self.sample_rate));
@@ -32,21 +32,6 @@ impl ParametricEq {
                 samples[i] = filter.process(samples[i])
             }
         }
-    }
-
-    pub fn get_freq_response(&self, lower_bound: u32, upper_bound: u32, num_points: usize) -> Vec<(f32, f32)> {
-        let freq_step = (upper_bound - lower_bound) as f32 / num_points as f32;
-        let mut test_pts = vec![(0., 0.); num_points as usize];
-        for i in 0..num_points {
-            let test_freq = i as f32 * freq_step;
-            let mut sum = 0.;
-            for node in &self.nodes {
-                sum += (20. * node.calc_response(test_freq as f32).log10()) - node.ref_value;
-            }
-            test_pts[i] = (test_freq, sum);
-        }
-
-        test_pts
     }
 
     pub fn get_freq_response_log(&self, lower_bound: u32, upper_bound: u32, num_points: usize) -> Vec<(f32, f32)> {
@@ -63,6 +48,7 @@ impl ParametricEq {
     }
 }
 
+#[allow(unused)]
 pub enum FilterType {
     PEAKING,
     LPF,
@@ -73,6 +59,7 @@ pub enum FilterType {
     HIGHSHELF
 }
 
+#[allow(unused)]
 pub struct EqNode {
     node_type: FilterType,
     freq: f32,
@@ -80,6 +67,7 @@ pub struct EqNode {
     q: f32,
 }
 
+#[allow(unused)]
 impl EqNode { 
     pub fn new(freq: f32, gain: f32, q: f32, node_type: FilterType) -> Self {
         Self { node_type, freq, gain, q }
@@ -126,17 +114,17 @@ impl Biquad {
         out
     }
 
-    pub fn with_coefficients(b0: f32, b1: f32, b2: f32, a1: f32, a2: f32, sample_rate: u32) -> Self {
-        let mut out = Self {
-            b0, b1, b2, a1, a2,
-            z1: 0.,
-            z2: 0.,
-            sample_rate,
-            ref_value: 0.
-        };
-        out.find_ref_value();
-        out
-    }
+    //pub fn with_coefficients(b0: f32, b1: f32, b2: f32, a1: f32, a2: f32, sample_rate: u32) -> Self {
+    //    let mut out = Self {
+    //        b0, b1, b2, a1, a2,
+    //        z1: 0.,
+    //        z2: 0.,
+    //        sample_rate,
+    //        ref_value: 0.
+    //    };
+    //    out.find_ref_value();
+    //    out
+    //}
 
     fn find_ref_value(&mut self) {
         // take samples along frequency range, finding the value closest to unity gain 

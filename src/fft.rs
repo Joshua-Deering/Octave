@@ -1,5 +1,6 @@
 use std::{f32::consts::{PI, TAU}, num::NonZero, ops::{Add, AddAssign, Div, Mul, MulAssign, Sub}, thread};
 use fastapprox::fast;
+
 use crate::audio::{FreqData, WindowFunction};
 
 pub struct Fft {

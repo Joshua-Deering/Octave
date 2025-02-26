@@ -63,13 +63,6 @@ impl WindowFunction {
             _ => None
         }
     }
-
-    pub fn to_string(&self) -> String {
-        match self {
-            Self::Square => "Square".into(),
-            Self::Hann => "Hann".into()
-        }
-    }
 }
 
 impl From<usize> for WindowFunction {

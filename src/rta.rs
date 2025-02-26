@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex};
 
-use cpal::{default_host, traits::{DeviceTrait, HostTrait, StreamTrait}, Data, InputCallbackInfo, SampleRate, Stream};
+use cpal::{default_host, traits::{DeviceTrait, HostTrait, StreamTrait}, InputCallbackInfo, SampleRate, Stream};
 
-use crate::{fft::Fft, audio::{FreqData, WindowFunction}};
+use crate::fft::Fft;
+use crate::audio::{FreqData, WindowFunction};
 
 pub struct RTA {
     cache_size: usize,
