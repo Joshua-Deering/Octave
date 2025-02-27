@@ -18,6 +18,7 @@ component MainUi {
     pure callback init_eq_nodes(num_nodes: int) -> [NodeData];
     pure callback set_eq(nodes: [NodeData]);
     pure callback request_eq_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
+    pure callback request_eq_fill_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
 
     in property <int> cur_menu;
     
@@ -91,6 +92,9 @@ component MainUi {
                 }
                 request_eq_response(n, lf, hf, min_gain, max_gain, x, y) => {
                     root.request_eq_response(n, lf, hf, min_gain, max_gain, x, y)
+                }
+                request_eq_fill_response(n, lf, hf, min_gain, max_gain, x, y) => {
+                    root.request_eq_fill_response(n, lf, hf, min_gain, max_gain, x, y)
                 }
                 set_eq(nodes) => {
                     root.set_eq(nodes);
@@ -551,6 +555,7 @@ export component MainWindow inherits Window {
     pure callback init_eq_nodes <=> main_ui.init_eq_nodes;
     pure callback set_eq <=> main_ui.set_eq;
     pure callback request_eq_response <=> main_ui.request_eq_response;
+    pure callback request_eq_fill_response <=> main_ui.request_eq_fill_response;
 
     in-out property slider_pos <=> main_ui.slider_pos;
     out property <bool> slider_pressed <=> main_ui.slider_pressed;

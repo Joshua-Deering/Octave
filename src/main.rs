@@ -11,7 +11,7 @@ use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
 use rta::ExternalRta;
 use util::*;
 use file_io::{read_data, read_wav_meta};
-use img_generator::{generate_eq_response, generate_rta_line, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
+use img_generator::{generate_eq_response, generate_eq_fill_response, generate_rta_line, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
 use players::AudioPlayer;
 use parametric_eq::ParametricEq;
 
@@ -160,6 +160,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         generate_eq_response(&drawn_eq, min_freq, max_freq, min_gain, max_gain, imgx as u32, imgy as u32)
+    });
+
+    // Draw Eq fill
+    main_window.on_request_eq_fill_response(move | 
+        eq_nodes: ModelRc<NodeData>,
+        min_freq: f32, max_freq: f32,
+        min_gain: f32, max_gain: f32,
+        imgx: f32, imgy: f32 | {
+        let mut drawn_eq = ParametricEq::new(vec![], 48000);
+        if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
+            for n in nodes.iter() {
+                drawn_eq.add_node(n.freq as u32, n.gain, n.q);
+            }
+        }
+
+        generate_eq_fill_response(&drawn_eq, min_freq, max_freq, min_gain, max_gain, imgx as u32, imgy as u32)
     });
 
     // Set audio player EQ

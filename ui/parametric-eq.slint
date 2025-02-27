@@ -18,6 +18,7 @@ export component ParametricEq {
     pure callback initialize_eq_nodes(int, int, int) -> [NodeData];
     pure callback set_eq([NodeData]);
     pure callback request_eq_response([NodeData], float, float, float, float, length, length) -> string;
+    pure callback request_eq_fill_response([NodeData], float, float, float, float, length, length) -> string;
 
     width: 100%;
     height: 100%;
@@ -46,6 +47,7 @@ export component ParametricEq {
     property <length> hovered_node_y;
 
     in-out property <string> eq_graph_cmds;
+    in-out property <string> eq_graph_fill_cmds;
     property <bool> on_cooldown;
     property <bool> eq_changed;
 
@@ -55,12 +57,16 @@ export component ParametricEq {
 
     changed num_nodes => {
         self.eq_nodes = initialize_eq_nodes(self.num_nodes, min_freq, max_freq);
+        self.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
     }
     changed draw_area_width => {
         self.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+        self.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+        debug(root.eq_graph_fill_cmds);
     }
     changed draw_area_height => {
         self.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+        self.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
     }
     VerticalLayout {
         drawing_area := Rectangle {
@@ -91,6 +97,22 @@ export component ParametricEq {
                 border_color: Palette.secondary;
             }
 
+            Path {
+                width: root.draw_area_width;
+                height: root.draw_area_height;
+                x: graph_margin;
+                y: graph_margin;
+
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: root.draw_area_width / 1px;
+                viewbox-height: root.draw_area_height / 1px;
+
+                commands: root.eq_graph_fill_cmds;
+                stroke: transparent;
+                stroke-width: 3px;
+                fill: Palette.accent2.transparentize(60%);
+            }
 
             Path {
                 width: root.draw_area_width;
@@ -104,7 +126,7 @@ export component ParametricEq {
                 viewbox-height: root.draw_area_height / 1px;
 
                 stroke: Palette.accent3;
-                stroke-width: 1.5px;
+                stroke-width: 2.5px;
                 commands: root.eq_graph_cmds;
             }
 
@@ -173,6 +195,7 @@ export component ParametricEq {
 
                         if (!root.on_cooldown) {
                             root.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+                            root.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
 
                             root.on_cooldown = true;
                             cooldown.running = true;

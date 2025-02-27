@@ -1,4 +1,4 @@
-use std::{io::BufReader, fs::File};
+use std::{fs::File, io::BufReader};
 
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
@@ -127,7 +127,32 @@ pub fn generate_eq_response(
         svg_string_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1) + 1));
     }
     
-    (format!("M {} {} ", freq_to_x(min_freq), gain_to_y(eq_points[0].1)) + svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()).into()
+    (format!("M {} {} ", freq_to_x(min_freq), gain_to_y(eq_points[0].1)) +
+     svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()).into()
+}
+
+pub fn generate_eq_fill_response(
+    param_eq: &ParametricEq,
+    min_freq: f32, max_freq: f32,
+    min_gain: f32, max_gain: f32,
+    imgx: u32, imgy: u32) -> SharedString {
+    let freq_to_x = | f: f32 | -> u32 {
+        ((f.log10() - min_freq.log10()) / (max_freq.log10() - min_freq.log10()) * imgx as f32) as u32
+    };
+    let gain_to_y = | gain: f32 | -> u32 {
+        ((imgy / 2) as f32 - gain / (max_gain - min_gain) * imgy as f32) as u32
+    };
+
+    let eq_points = param_eq.get_freq_response_log(min_freq as u32, max_freq as u32, (imgx / 2) as usize);
+
+    let mut svg_string_cmds: Vec<(u32, u32)> = Vec::with_capacity(eq_points.len());
+    for i in 0..eq_points.len() {
+        svg_string_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1) + 1));
+    }
+    
+    (format!("M 0 {} L {} {} ", imgy / 2, freq_to_x(min_freq), gain_to_y(eq_points[0].1)) +
+     svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()
+     + format!("L {} {} L 0 {}", imgx, imgy / 2, imgy / 2).as_str()).into()
 }
 
 pub fn generate_spectrogram_img(

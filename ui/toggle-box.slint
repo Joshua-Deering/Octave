@@ -10,7 +10,7 @@ export component ToggleBox {
     
     Rectangle {
         border-radius: 5px;
-        background: root.background;
+        background: ta.pressed ? root.background.darker(50%) : ta.has-hover ? root.background.darker(-10%) : root.background;
 
         Text {
             horizontal-alignment: center;
