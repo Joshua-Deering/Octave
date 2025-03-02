@@ -61,6 +61,12 @@ impl fmt::Display for WavInfo {
     }
 }
 
+pub fn read_wav_sample_rate(f: String) -> u32 {
+    let mut r = BufReader::new(File::open(format!("./res/audio/{}", f)).unwrap());
+    r.seek_relative(24).unwrap();
+    read_le_uint(&mut r, 4)
+}
+
 pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     f.seek(SeekFrom::Start(0)).unwrap();
 

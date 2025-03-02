@@ -2,34 +2,55 @@ use std::f32::consts::TAU;
 
 use crate::util::logspace;
 
+pub struct EqNode {
+    filter_type: FilterType,
+    freq: f32,
+    gain: f32,
+    q: f32,
+}
+
 pub struct ParametricEq {
-    nodes: Vec<Biquad>,
+    nodes: Vec<EqNode>,
+    filters: Vec<Biquad>,
     sample_rate: u32,
 }
 
 impl ParametricEq {
-    pub fn new(nodes: Vec<Biquad>, sample_rate: u32) -> Self {
+    pub fn new(nodes: Vec<EqNode>, sample_rate: u32) -> Self {
+        let mut filters = Vec::with_capacity(nodes.len());
+        for i in 0..nodes.len() {
+            filters.push(Biquad::new(nodes[i].filter_type, nodes[i].freq, nodes[i].gain, nodes[i].q, sample_rate));
+        }
         Self {
             nodes,
+            filters,
             sample_rate,
         }
     }
     
     pub fn reset(&mut self) {
-        self.nodes = vec![];
+        self.filters = vec![];
     }
 
     //pub fn add_biquad(&mut self, node: Biquad) {
     //    self.nodes.push(node);
     //}
+    
+    pub fn set_sample_rate(&mut self, sample_rate: u32) {
+        let mut filters = Vec::with_capacity(self.nodes.len());
+        for i in 0..self.nodes.len() {
+            filters.push(Biquad::new(self.nodes[i].filter_type, self.nodes[i].freq, self.nodes[i].gain, self.nodes[i].q, sample_rate));
+        }
+        self.filters = filters;
+    }
 
-    pub fn add_node(&mut self, f_type: FilterType, freq: u32, gain: f32, q: f32) {
-        self.nodes.push(Biquad::new(f_type, freq, gain, q, self.sample_rate));
+    pub fn add_node(&mut self, f_type: FilterType, freq: f32, gain: f32, q: f32) {
+        self.filters.push(Biquad::new(f_type, freq, gain, q, self.sample_rate));
     }
 
     pub fn process(&mut self, samples: &mut [f32]) {
         for i in 0..samples.len() {
-            for filter in &mut self.nodes {
+            for filter in &mut self.filters {
                 samples[i] = filter.process(samples[i])
             }
         }
@@ -39,7 +60,7 @@ impl ParametricEq {
         let mut test_pts = vec![(0., 0.); num_points as usize];
         for (test_freq, i) in logspace(lower_bound as f32, upper_bound as f32, num_points).zip(0..num_points) {
             let mut sum = 0.;
-            for node in &self.nodes {
+            for node in &self.filters {
                 sum += (20. * node.calc_response(test_freq as f32).log10()) - node.ref_value;
             }
             test_pts[i] = (test_freq, sum);
@@ -49,6 +70,7 @@ impl ParametricEq {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum FilterType {
     PEAK,
     LPF,
@@ -87,7 +109,7 @@ pub struct Biquad {
 impl Biquad {
     // q in this function is technically either Q, Bandwidth (BW) or Slope (S), but is just represented as q
     // for simplicity.
-    pub fn new(filter_type: FilterType, frequency: u32, gain: f32, q: f32, sample_rate: u32) -> Self {
+    pub fn new(filter_type: FilterType, frequency: f32, gain: f32, q: f32, sample_rate: u32) -> Self {
         let omega = TAU * frequency as f32 / sample_rate as f32;
         let cos_omega = omega.cos();
         let sin_omega = omega.sin();

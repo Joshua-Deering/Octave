@@ -14,7 +14,7 @@ component MainUi {
     callback toggle_play(state: bool);
     callback file_select(file: string);
     callback slider_released(pos: float);
-    callback render_waveform(file: string, imgx: length, imgy: length) -> image;
+    callback render_waveform(file: string, imgx: length, imgy: length);
     pure callback init_eq_nodes(num_nodes: int) -> [NodeData];
     pure callback set_eq(nodes: [NodeData]);
     pure callback request_eq_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
@@ -32,7 +32,7 @@ component MainUi {
 
     property <length> imgx: root.width;
     property <length> imgy: 100px;
-    property <image> waveform_img;
+    in property <image> waveform_img;
 
     pure function format_time(seconds: float) -> string {
         return floor(seconds / 60) + ":" + (floor(Math.mod(seconds, 60)) < 10 ? "0" : "") + floor(Math.mod(seconds, 60));
@@ -123,7 +123,7 @@ component MainUi {
                         root.selected_file = val;
                         root.is_playing = false;
                         root.file_select(val);
-                        root.waveform_img = root.render_waveform(val, root.imgx, root.imgy);
+                        root.render_waveform(val, root.imgx, root.imgy);
                     }
                 }
             }
@@ -548,6 +548,7 @@ export component MainWindow inherits Window {
     in property <float> file_duration <=> main_ui.file_duration;
     in-out property <bool> is_playing <=> main_ui.is_playing;
     in-out property <string> selected_file <=> main_ui.selected_file;
+    in property <image> waveform_img <=> main_ui.waveform_img;
 
     callback init_menu <=> main_ui.init_menu;
     callback toggle_play <=> main_ui.toggle_play;

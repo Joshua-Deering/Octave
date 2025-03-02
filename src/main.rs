@@ -8,9 +8,9 @@ mod parametric_eq;
 mod rta;
 
 use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
-use rta::ExternalRta;
+use rta::{ExternalRta, RTA};
 use util::*;
-use file_io::{read_data, read_wav_meta};
+use file_io::{read_data, read_wav_meta, read_wav_sample_rate};
 use img_generator::{generate_eq_response, generate_eq_fill_response, generate_rta_line, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
 use players::AudioPlayer;
 use parametric_eq::{FilterType, ParametricEq};
@@ -39,6 +39,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let player: Rc<RefCell<Option<AudioPlayer>>> = Rc::new(RefCell::new(None));
     let player_eq = Arc::new(Mutex::new(ParametricEq::new(vec![], 48000)));
+    // TODO: implement this
+    let _player_rta: Arc<Mutex<Option<RTA>>> = Arc::new(Mutex::new(None));
 
     let rta: Rc<RefCell<Option<ExternalRta>>> = Rc::new(RefCell::new(None));
 
@@ -60,11 +62,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let mut supported_files: Vec<SharedString> = vec![];
                 for f in files {
-                    let mut reader = BufReader::new(File::open(format!("./res/audio/{}", f)).unwrap());
-                    let f_info = read_wav_meta(&mut reader);
+                    let sample_rate = read_wav_sample_rate(f.clone().into());
 
                     if let Some(_) = supported_configs.iter().find(|e| {
-                        e.max_sample_rate() == SampleRate(f_info.sample_rate)
+                        e.max_sample_rate() == SampleRate(sample_rate)
                     }) {
                         supported_files.push(f);
                     }
@@ -155,7 +156,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut drawn_eq = ParametricEq::new(vec![], 48000);
         if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
             for n in nodes.iter() {
-                drawn_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq as u32, n.gain, n.q);
+                drawn_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq, n.gain, n.q);
             }
         }
 
@@ -171,7 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut drawn_eq = ParametricEq::new(vec![], 48000);
         if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
             for n in nodes.iter() {
-                drawn_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq as u32, n.gain, n.q);
+                drawn_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq, n.gain, n.q);
             }
         }
 
@@ -185,7 +186,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         player_eq.reset();
         if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
             for n in nodes.iter() {
-                player_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq as u32, n.gain, n.q);
+                player_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq, n.gain, n.q);
             }
         }
     });
@@ -223,6 +224,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let file_sel_ptr = main_window.as_weak();
         let player_eq_ptr = Arc::clone(&player_eq);
         main_window.on_file_select(move |file: SharedString| {
+            let sample_rate = read_wav_sample_rate(file.clone().into());
+            player_eq_ptr.lock().unwrap().set_sample_rate(sample_rate);
+
             *audio_player_ref.borrow_mut() = Some(AudioPlayer::new(file.into(), Arc::clone(&player_eq_ptr)));
             let main_window = file_sel_ptr.upgrade().unwrap();
             let file_dur = audio_player_ref.borrow().as_ref().unwrap().duration;
@@ -231,7 +235,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Generate Waveform Preview for Audio Player
-    main_window.on_render_waveform(generate_waveform_preview);
+    {
+        let window_weak = main_window.as_weak();
+        main_window.on_render_waveform(move |file: SharedString, imgx: f32, imgy: f32| {
+            let window_weak = window_weak.clone();
+            thread::spawn(move || {
+                let img = generate_waveform_preview(file, imgx, imgy);
+                window_weak.upgrade_in_event_loop(|handle| {
+                    handle.set_waveform_img(Image::from_rgba8(img));
+                })
+            });
+        });
+    }
 
     // Spectrogram Generation --------------------------------------------------
     {

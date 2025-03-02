@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use cpal::{default_host, traits::{DeviceTrait, HostTrait, StreamTrait}, InputCallbackInfo, SampleRate, Stream};
+use cpal::{default_host, traits::{DeviceTrait, HostTrait, StreamTrait}, InputCallbackInfo, SampleRate, Stream, SupportedStreamConfigRange};
 
 use crate::fft::Fft;
 use crate::audio::{FreqData, WindowFunction};
@@ -13,8 +13,8 @@ pub struct RTA {
 }
 
 impl RTA {
-    pub fn new(num_samples: usize) -> Self {
-        let fft = Fft::new(48000, num_samples, WindowFunction::Square);
+    pub fn new(num_samples: usize, sample_rate: u32) -> Self {
+        let fft = Fft::new(sample_rate, num_samples, WindowFunction::Square);
         Self {
             cache_size: num_samples,
             cached_samples: vec![0.; num_samples],
@@ -54,15 +54,27 @@ pub struct ExternalRta {
 
 impl ExternalRta {
     pub fn new(cache_size: usize) -> Self {
-        let rta = Arc::new(Mutex::new(RTA::new(cache_size)));
 
         let host = default_host();
         let device = host.default_input_device().expect("No input device available!");
-        let mut supported_config_range = device.supported_input_configs().expect("Error querying input configs!");
+        let supported_config_range = device.supported_input_configs().expect("Error querying input configs!");
+        let supported_configs = supported_config_range.into_iter().collect::<Vec<SupportedStreamConfigRange>>();
 
-        let config = supported_config_range
-            .find(|e| e.max_sample_rate() == SampleRate(48000)).unwrap()
-            .with_max_sample_rate().config();
+        //find a sample rate at or under 48kHz
+        let mut config_opt = None;
+        for c in supported_configs.iter().rev() {
+            if c.max_sample_rate() == SampleRate(48000) || c.max_sample_rate() < SampleRate(48000) {
+                config_opt = Some(c.with_max_sample_rate().config());
+                break;
+            }
+        }
+        if config_opt == None {
+            panic!("No supported input configs!");
+        }
+
+        let config = config_opt.unwrap();
+
+        let rta = Arc::new(Mutex::new(RTA::new(cache_size, config.sample_rate.0)));
         
         let rta_copy = Arc::clone(&rta);
         let stream = device.build_input_stream(

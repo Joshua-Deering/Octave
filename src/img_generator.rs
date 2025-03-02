@@ -1,13 +1,13 @@
 use std::{fs::File, io::BufReader, u32};
 
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
-use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
+use slint::{Rgba8Pixel, SharedPixelBuffer, SharedString};
 
 use crate::{audio::{FreqData, ShortTimeDftData}, file_io::{read_data, read_wav_meta}, util::hue_to_rgb, ParametricEq};
 
-pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32) -> Image {
+pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32) -> SharedPixelBuffer<Rgba8Pixel> {
     if audio_file.trim().is_empty() {
-        return Image::default();
+        return SharedPixelBuffer::new(imgx as u32, imgy as u32);
     }
 
     let mut file = BufReader::new(File::open(format!("./res/audio/{}", audio_file)).unwrap());
@@ -59,7 +59,7 @@ pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32)
             }
         }
     } 
-    Image::from_rgba8(shared_buf)
+    shared_buf
 }
 
 pub fn generate_rta_line(
