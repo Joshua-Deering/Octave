@@ -13,7 +13,7 @@ use util::*;
 use file_io::{read_data, read_wav_meta};
 use img_generator::{generate_eq_response, generate_eq_fill_response, generate_rta_line, generate_spectrogram_img, generate_waveform_img, generate_waveform_preview};
 use players::AudioPlayer;
-use parametric_eq::ParametricEq;
+use parametric_eq::{FilterType, ParametricEq};
 
 use slint::{run_event_loop, Image, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 use cpal::{traits::{DeviceTrait, HostTrait}, SampleRate};
@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let max_freq: f32 = 20000.;
         for i in 0..n {
             let freq = (min_freq * (max_freq / min_freq).powf(i as f32 / (n as f32 - 1.0))).round();
-            nodes.push(NodeData { gain: 0., freq, q: 1.0 });
+            nodes.push(NodeData { f_type: "Peak".into(), gain: 0., freq, q: 1.0 });
         }
         return ModelRc::new(Rc::new(VecModel::from(nodes)));
     });
@@ -155,7 +155,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut drawn_eq = ParametricEq::new(vec![], 48000);
         if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
             for n in nodes.iter() {
-                drawn_eq.add_node(n.freq as u32, n.gain, n.q);
+                drawn_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq as u32, n.gain, n.q);
             }
         }
 
@@ -171,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut drawn_eq = ParametricEq::new(vec![], 48000);
         if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
             for n in nodes.iter() {
-                drawn_eq.add_node(n.freq as u32, n.gain, n.q);
+                drawn_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq as u32, n.gain, n.q);
             }
         }
 
@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         player_eq.reset();
         if let Some(nodes) = eq_nodes.as_any().downcast_ref::<VecModel<NodeData>>() {
             for n in nodes.iter() {
-                player_eq.add_node(n.freq as u32, n.gain, n.q);
+                player_eq.add_node(FilterType::from_string(n.f_type.into()), n.freq as u32, n.gain, n.q);
             }
         }
     });

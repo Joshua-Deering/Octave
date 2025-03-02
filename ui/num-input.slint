@@ -1,15 +1,22 @@
 
 export component NumInput {
-    in-out property <int> value;
+    in-out property <float> value;
     
+    in property <bool> is_int: true;
     in property <color> background;
     in property <color> text-color;
 
-    in property <int> min;
-    in property <int> max;
+    in property <float> min;
+    in property <float> max;
 
     width: r.width;
     height: r.height;
+
+    callback accepted(val: float);
+    
+    changed value => {
+        te.text = root.value;
+    }
 
     r := Rectangle {
         background: root.background;
@@ -19,7 +26,7 @@ export component NumInput {
         te := TextInput {
             x: 4px;
             y: 1px;
-            text: root.value;
+            text: {root.value};
             color: root.text-color;
             key-released(event) => {
                 if (event.text == Key.Escape) {
@@ -35,14 +42,24 @@ export component NumInput {
                 if (!self.text.is-float()) {
                     self.text = root.value;
                 } else {
-                    if (self.text.to-float().floor() > max) {
-                        root.value = root.max;
-                    } else if (self.text.to-float().floor() < min) {
-                        root.value = root.min;
+                    if (root.is_int) {
+                        if (self.text.to-float().floor() > max.floor()) {
+                            root.value = root.max;
+                        } else if (self.text.to-float().floor() < min.floor()) {
+                            root.value = root.min;
+                        } else {
+                            root.value = self.text.to-float().floor();
+                        }
                     } else {
-                        root.value = self.text.to-float().floor();
+                        if (self.text.to-float() > max) {
+                            root.value = root.max;
+                        } else if (self.text.to-float() < min) {
+                            root.value = root.min;
+                        } else {
+                            root.value = self.text.to-float();
+                        }
                     }
-                    self.text = root.value;
+                    root.accepted(root.value);
                 }
             }
         }

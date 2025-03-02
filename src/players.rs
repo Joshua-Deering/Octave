@@ -1,5 +1,5 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{Data, Host, OutputCallbackInfo, SampleFormat, SampleRate};
+use cpal::{Stream, Data, Host, OutputCallbackInfo, SampleFormat, SampleRate};
 use std::fs::File;
 use std::io::{BufReader, Seek, SeekFrom};
 use std::sync::{Mutex, Arc};
@@ -12,6 +12,10 @@ pub struct AudioPlayer {
     internal_player: Arc<Mutex<FilePlayer>>,
     pub playing: bool,
     pub duration: f32,
+
+    // this is not actually dead code, since the stream wont work if dropped out of scope. (ask me how i know)
+    #[allow(dead_code)]
+    stream: Stream,
 }
 
 impl AudioPlayer {
@@ -44,7 +48,9 @@ impl AudioPlayer {
                     stream_player_copy.lock().unwrap().next_chunk(data);
                     eq_copy.lock().unwrap().process(data.as_slice_mut().unwrap());
                 },
-                move |_err| {},
+                move |err| {
+                    panic!("{}", err)
+                },
                 None
             ).unwrap();
         stream.play().unwrap();
@@ -53,6 +59,7 @@ impl AudioPlayer {
             internal_player,
             playing: false,
             duration: meta.audio_duration,
+            stream
         }
     }
 

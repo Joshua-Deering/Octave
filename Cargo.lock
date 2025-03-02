@@ -3,6 +3,19 @@
 version = 4
 
 [[package]]
+name = "Octave"
+version = "0.1.0"
+dependencies = [
+ "console-menu",
+ "cpal",
+ "fastapprox",
+ "image 0.25.5",
+ "rand",
+ "slint",
+ "slint-build",
+]
+
+[[package]]
 name = "ab_glyph"
 version = "0.2.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4848,19 +4861,6 @@ name = "wasm-bindgen-shared"
 version = "0.2.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "943aab3fdaaa029a6e0271b35ea10b72b943135afe9bffca82384098ad0e06a6"
-
-[[package]]
-name = "wav_parser"
-version = "0.1.0"
-dependencies = [
- "console-menu",
- "cpal",
- "fastapprox",
- "image 0.25.5",
- "rand",
- "slint",
- "slint-build",
-]
 
 [[package]]
 name = "wayland-backend"

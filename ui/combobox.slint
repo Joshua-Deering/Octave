@@ -4,15 +4,19 @@ export component ComboBox {
     in property <color> text_color;
 
     in property <[string]> options;
-    property <int> current_index: -1;
+    in-out property <int> current_index: -1;
     property <string> current_value: "";
 
     in property <bool> enabled: true;
 
     callback selected(string);
     
-    min-width: 100px;
+    min-width: 80px;
     min-height: 20px;
+
+    init => {
+        current_value = options[current_index];
+    }
 
     Rectangle {
         background: root.background;

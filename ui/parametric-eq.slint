@@ -1,8 +1,11 @@
 import { Button } from "std-widgets.slint";
 import { Palette } from "./colors.slint";
 import { LogGraph } from "./log-graph.slint";
+import { ComboBox } from "./combobox.slint";
+import { LabelledInput } from "./labelled-input.slint";
 
 export struct NodeData {
+    f_type: string,
     gain: float,
     freq: float,
     q: float,
@@ -27,6 +30,8 @@ export component ParametricEq {
     out property <float> max_freq: 20000;
     out property <float> min_gain: -15;
     out property <float> max_gain: 15;
+    property <float> min_q: 0.1;
+    property <float> max_q: 100.0;
 
     property <length> left_axis_margin: 0px;
     property <length> bottom_axis_margin: 0px;
@@ -36,7 +41,7 @@ export component ParametricEq {
     out property <length> graph_height: root.height * 0.8;
     out property <length> draw_area_height: graph_height - bottom_axis_margin - 2 * graph_margin;
 
-    property <length> node_rad: 8px;
+    property <length> node_rad: 9px;
 
     in property <int> num_nodes: 5;
     out property <[NodeData]> eq_nodes: initialize_eq_nodes(self.num_nodes, min_freq, max_freq);
@@ -55,6 +60,12 @@ export component ParametricEq {
     property <[float]> minor_freqs: [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000, 15000];
     property <[float]> key_gains: [-10, -5, 0, 5, 10];
 
+    function set_eq_and_draw() {
+        root.set_eq(root.eq_nodes);
+        root.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+        root.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
+    }
+
     changed num_nodes => {
         self.eq_nodes = initialize_eq_nodes(self.num_nodes, min_freq, max_freq);
         self.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
@@ -62,7 +73,6 @@ export component ParametricEq {
     changed draw_area_width => {
         self.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
         self.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
-        debug(root.eq_graph_fill_cmds);
     }
     changed draw_area_height => {
         self.eq_graph_cmds = request_eq_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
@@ -137,8 +147,16 @@ export component ParametricEq {
                 color: red;
                 visible: root.eq_changed;
             }
+            
             for node[i] in eq_nodes: Rectangle {
                 property <bool> has_hover: is_inside(self.x + root.node_rad, self.y + root.node_rad, peq_ta.mouse-x, peq_ta.mouse-y, root.node_rad);
+
+                Text {
+                    text: i + 1;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    color: has_hover ? Palette.accent2 : Palette.accent1;
+                }
 
                 x: root.freq_to_x(node.freq) - root.node_rad;
                 y: root.gain_to_y(node.gain) - root.node_rad;
@@ -160,6 +178,7 @@ export component ParametricEq {
                     }
                 }
             }
+
             peq_ta := TouchArea {
                 cooldown := Timer {
                     interval: 20ms;
@@ -228,19 +247,114 @@ export component ParametricEq {
                         height: 100%;
                         VerticalLayout {
                             padding-top: 3px;
-                            Text {
-                                text: "Gain: " + Math.floor(node.gain * 100) / 100;
-                                color: Palette.accent1;
+                            padding-bottom: 3px;
+                            if (node.f_type == "Peak" || node.f_type == "Low Shelf" || node.f_type == "High Shelf") : LabelledInput {
+                                property <float> g: Math.floor(node.gain * 100) / 100;
+                                label: "Gain: ";
+                                value: { g }
+                                changed g => {
+                                    self.value = g;
+                                }
+                                units: "dB";
+                                is_int: false;
+                                min: root.min_gain;
+                                max: root.max_gain;
+                                text_color: Palette.accent1;
+                                input_background: Palette.secondary.darker(20%);
+                                accepted(val) => {
+                                    eq_nodes[i].gain = val;
+                                    set_eq_and_draw();
+                                }
                             }
 
-                            Text {
-                                text: "Freq: " + Math.floor(node.freq * 100) / 100;
-                                color: Palette.accent1;
+                            LabelledInput {
+                                property <float> f: Math.floor(node.freq * 100) / 100;
+                                label: "Freq: ";
+                                value: { f }
+                                changed f => {
+                                    self.value = f;
+                                }
+                                units: "Hz";
+                                is_int: false;
+                                min: root.min_freq;
+                                max: root.max_freq;
+                                text_color: Palette.accent1;
+                                input_background: Palette.secondary.darker(20%);
+                                accepted(val) => {
+                                    eq_nodes[i].freq = val;
+                                    set_eq_and_draw();
+                                }
                             }
 
-                            Text {
-                                text: "Q: " + Math.floor(node.q * 100) / 100;
-                                color: Palette.accent1;
+                            // Q, BW and S
+                            if (node.f_type == "Peak"):  LabelledInput {
+                                property <float> q: Math.floor(node.q * 100) / 100;
+                                label: "Q: ";
+                                value: { q }
+                                changed q => {
+                                    self.value = q;
+                                }
+                                units: "";
+                                is_int: false;
+                                min: root.min_q;
+                                max: root.max_q;
+                                text_color: Palette.accent1;
+                                input_background: Palette.secondary.darker(20%);
+                                accepted(val) => {
+                                    eq_nodes[i].q = val;
+                                    set_eq_and_draw();
+                                }
+                            }
+                            if (node.f_type == "LPF" || node.f_type == "HPF" || node.f_type == "Low Shelf" || node.f_type == "High Shelf"): LabelledInput {
+                                property <float> q: Math.floor(node.q * 100) / 100;
+                                label: "Slope: ";
+                                value: { q }
+                                changed q => {
+                                    self.value = q;
+                                }
+                                units: "";
+                                is_int: false;
+                                min: root.min_q;
+                                max: root.max_q;
+                                text_color: Palette.accent1;
+                                input_background: Palette.secondary.darker(20%);
+                                accepted(val) => {
+                                    eq_nodes[i].q = val;
+                                    set_eq_and_draw();
+                                }
+                            }
+                            if (node.f_type == "Notch"): LabelledInput {
+                                property <float> q: Math.floor(node.q * 100) / 100;
+                                label: "Bandwidth: ";
+                                value: { q }
+                                changed q => {
+                                    self.value = q;
+                                }
+                                units: "";
+                                is_int: false;
+                                min: root.min_q;
+                                max: root.max_q;
+                                text_color: Palette.accent1;
+                                input_background: Palette.secondary.darker(20%);
+                                accepted(val) => {
+                                    eq_nodes[i].q = val;
+                                    set_eq_and_draw();
+                                }
+                            }
+
+
+                            ComboBox {
+                                width: self.min-width;
+                                height: 25px;
+                                x: parent.width / 2 - self.width / 2;
+                                background: Palette.accent1.darker(30%);
+                                text_color: Palette.textcol;
+                                current_index: 5;
+                                options: ["LPF", "HPF", "Low Shelf", "High Shelf", "Notch", "Peak"];
+                                selected(val) => {
+                                    eq_nodes[i].f_type = val;
+                                    set_eq_and_draw();
+                                }
                             }
                         }
                     }

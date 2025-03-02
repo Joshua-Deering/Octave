@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader};
+use std::{fs::File, io::BufReader, u32};
 
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
@@ -75,6 +75,7 @@ pub fn generate_rta_line(
 
     let mut low_bound = min_freq;
     let mut fft_i = 0;
+    let mut last_fft_i = 0;
     while low_bound < max_freq {
         let mut bin_sum = 0.;
         let upper_bound = low_bound * band_multiplier;
@@ -83,13 +84,18 @@ pub fn generate_rta_line(
             bin_sum += fft[fft_i].amplitude;
             fft_i += 1;
         }
+        if fft_i == last_fft_i {
+            bins.push(bins[bins.len()-1]);
+        } else {
+            bins.push(((low_bound + upper_bound) / 2., 20. * bin_sum.log10()));
+        }
 
-        bins.push(((low_bound + upper_bound) / 2., 20. * bin_sum.log10()));
         low_bound *= band_multiplier;
 
         if fft_i >= fft.len() {
             break;
         }
+        last_fft_i = fft_i;
     }
 
     let freq_to_x = | f: f32 | -> u32 {
@@ -104,7 +110,10 @@ pub fn generate_rta_line(
         svg_string_cmds[i] = (freq_to_x(bins[i].0), level_to_y(bins[i].1));
     }
 
-    (format!("M 0 {}", imgy) + svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {}", x, y.min(imgy))).collect::<Vec<String>>().join("").as_str()).into()
+    (format!("M 0 {}", imgy) +
+     svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {}", x, y.min(imgy))).collect::<Vec<String>>().join("").as_str() + 
+     format!("L {} {}", imgx, imgy).as_str()
+    ).into()
 }
 
 pub fn generate_eq_response(
@@ -122,13 +131,13 @@ pub fn generate_eq_response(
 
     let eq_points = param_eq.get_freq_response_log(min_freq as u32, max_freq as u32, (imgx / 2) as usize);
 
-    let mut svg_string_cmds: Vec<(u32, u32)> = Vec::with_capacity(eq_points.len());
+    let mut svg_cmds: Vec<(u32, u32)> = Vec::with_capacity(eq_points.len());
     for i in 0..eq_points.len() {
-        svg_string_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1) + 1));
+        svg_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1).min(imgy * 2)));
     }
     
-    (format!("M {} {} ", freq_to_x(min_freq), gain_to_y(eq_points[0].1)) +
-     svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()).into()
+    (format!("M {} {} ", freq_to_x(min_freq), gain_to_y(eq_points[0].1).min(imgy)) +
+     svg_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x.clamp(0, imgx), y.clamp(0, imgy))).collect::<Vec<String>>().join("").as_str()).into()
 }
 
 pub fn generate_eq_fill_response(
@@ -147,12 +156,15 @@ pub fn generate_eq_fill_response(
 
     let mut svg_string_cmds: Vec<(u32, u32)> = Vec::with_capacity(eq_points.len());
     for i in 0..eq_points.len() {
-        svg_string_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1) + 1));
+        svg_string_cmds.push((freq_to_x(eq_points[i].0), gain_to_y(eq_points[i].1).min(imgy) + 1));
     }
     
-    (format!("M 0 {} L {} {} ", imgy / 2, freq_to_x(min_freq), gain_to_y(eq_points[0].1)) +
-     svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ", x, y)).collect::<Vec<String>>().join("").as_str()
-     + format!("L {} {} L 0 {}", imgx, imgy / 2, imgy / 2).as_str()).into()
+    (
+        format!("M -1.5 {} L {} {} ", imgy / 2, freq_to_x(min_freq), gain_to_y(eq_points[0].1)) +
+        svg_string_cmds.into_iter().map(|(x, y)| format!("L {} {} ",
+        x.clamp(0, imgx), y.clamp(0, imgy * 2))).collect::<Vec<String>>().join("").as_str() +
+        format!("L {} {} L 0 {}", imgx, imgy / 2, imgy / 2).as_str()
+    ).into()
 }
 
 pub fn generate_spectrogram_img(

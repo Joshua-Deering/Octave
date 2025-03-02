@@ -1,4 +1,5 @@
 use std::f32::consts::TAU;
+
 use crate::util::logspace;
 
 pub struct ParametricEq {
@@ -22,8 +23,8 @@ impl ParametricEq {
     //    self.nodes.push(node);
     //}
 
-    pub fn add_node(&mut self, freq: u32, gain: f32, q: f32) {
-        self.nodes.push(Biquad::new(freq, gain, q, self.sample_rate));
+    pub fn add_node(&mut self, f_type: FilterType, freq: u32, gain: f32, q: f32) {
+        self.nodes.push(Biquad::new(f_type, freq, gain, q, self.sample_rate));
     }
 
     pub fn process(&mut self, samples: &mut [f32]) {
@@ -48,29 +49,26 @@ impl ParametricEq {
     }
 }
 
-#[allow(unused)]
 pub enum FilterType {
-    PEAKING,
+    PEAK,
     LPF,
     HPF,
-//    BPF,
     NOTCH,
     LOWSHELF,
     HIGHSHELF
 }
 
-#[allow(unused)]
-pub struct EqNode {
-    node_type: FilterType,
-    freq: f32,
-    gain: f32,
-    q: f32,
-}
-
-#[allow(unused)]
-impl EqNode { 
-    pub fn new(freq: f32, gain: f32, q: f32, node_type: FilterType) -> Self {
-        Self { node_type, freq, gain, q }
+impl FilterType {
+    pub fn from_string(str: String) -> Self {
+        match str.to_lowercase().trim() {
+            "peak" => Self::PEAK,
+            "lpf" => Self::LPF,
+            "hpf" => Self::HPF,
+            "notch" => Self::NOTCH,
+            "low shelf" => Self::LOWSHELF,
+            "high shelf" => Self::HIGHSHELF,
+            _ => Self::PEAK,
+        }
     }
 }
 
@@ -87,17 +85,81 @@ pub struct Biquad {
 }
 
 impl Biquad {
-    pub fn new(frequency: u32, gain: f32, q: f32, sample_rate: u32) -> Self {
+    // q in this function is technically either Q, Bandwidth (BW) or Slope (S), but is just represented as q
+    // for simplicity.
+    pub fn new(filter_type: FilterType, frequency: u32, gain: f32, q: f32, sample_rate: u32) -> Self {
         let omega = TAU * frequency as f32 / sample_rate as f32;
-        let alpha = omega.sin() / (2. * q);
+        let cos_omega = omega.cos();
+        let sin_omega = omega.sin();
+
         let a_gain = 10f32.powf(gain / 40.);
 
-        let b0 = 1. + alpha * a_gain;
-        let b1 = -2. * omega.cos();
-        let b2 = 1. - alpha * a_gain;
-        let a0 = 1. + alpha / a_gain;
-        let a1 = -2. * omega.cos();
-        let a2 = 1. - alpha / a_gain;
+        let alpha = match filter_type {
+            FilterType::PEAK => sin_omega / (2. * q), // Q
+            FilterType::NOTCH => sin_omega * (((2f32.ln())/2.0) * q * (omega / sin_omega)).sinh(), // BW
+            FilterType::LPF | FilterType::HPF | FilterType::LOWSHELF | FilterType::HIGHSHELF =>
+                (sin_omega / 2.0) * ((a_gain + (1./a_gain)) * (1./q - 1.) + 2.).sqrt(), // S
+        };
+
+
+        let b0: f32;
+        let b1: f32;
+        let b2: f32;
+        let a0: f32;
+        let a1: f32;
+        let a2: f32;
+
+        // based on type of filter, initialize parameters differently
+        match filter_type {
+            FilterType::PEAK => {
+                b0 = 1. + alpha * a_gain;
+                b1 = -2. * omega.cos();
+                b2 = 1. - alpha * a_gain;
+                a0 = 1. + alpha / a_gain;
+                a1 = -2. * omega.cos();
+                a2 = 1. - alpha / a_gain;
+            }
+            FilterType::LPF => {
+                b0 = (1. - cos_omega) / 2.;
+                b1 = 1. - cos_omega;
+                b2 = (1. - cos_omega) / 2.;
+                a0 = 1. + alpha;
+                a1 = -2. * cos_omega;
+                a2 = 1. - alpha;
+            }
+            FilterType::HPF => {
+                b0 = (1. + cos_omega) / 2.;
+                b1 = - (1. + cos_omega);
+                b2 = (1. + cos_omega) / 2.;
+                a0 = 1. + alpha;
+                a1 = -2. * cos_omega;
+                a2 = 1. - alpha;
+            }
+            FilterType::LOWSHELF => {
+                b0 = a_gain * ((a_gain + 1.) - (a_gain - 1.) * cos_omega + 2. * a_gain.sqrt() * alpha);
+                b1 = 2. * a_gain * ((a_gain - 1.) - (a_gain + 1.) * cos_omega);
+                b2 = a_gain * ((a_gain + 1.) - (a_gain - 1.) * cos_omega - 2. * a_gain.sqrt() * alpha);
+                a0 = (a_gain + 1.) + (a_gain - 1.) * cos_omega + 2. * a_gain.sqrt() * alpha;
+                a1 = -2. * ((a_gain - 1.) + (a_gain + 1.) * cos_omega);
+                a2 = (a_gain + 1.) + (a_gain - 1.) * cos_omega - 2. * a_gain.sqrt() * alpha;
+            }
+            FilterType::HIGHSHELF => {
+                b0 = a_gain * ((a_gain + 1.) + (a_gain - 1.) * cos_omega + 2. * a_gain.sqrt() * alpha);
+                b1 = -2. * a_gain * ((a_gain - 1.) + (a_gain + 1.) * cos_omega);
+                b2 = a_gain * ((a_gain + 1.) + (a_gain - 1.) * cos_omega - 2. * a_gain.sqrt() * alpha);
+                a0 = (a_gain + 1.) - (a_gain - 1.) * cos_omega + 2. * a_gain.sqrt() * alpha;
+                a1 = 2. * ((a_gain - 1.) - (a_gain + 1.) * cos_omega);
+                a2 = (a_gain + 1.) - (a_gain - 1.) * cos_omega - 2. * a_gain.sqrt() * alpha;
+            }
+            FilterType::NOTCH => {
+                b0 = 1.;
+                b1 = -2. * cos_omega;
+                b2 = 1.;
+                a0 = 1. + alpha;
+                a1 = -2. * cos_omega;
+                a2 = 1. - alpha;
+            }
+        }
 
         let mut out = Self {
             b0: b0/a0,
