@@ -66,6 +66,16 @@ export component ParametricEq {
         root.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
     }
 
+    function into_index(node_type: string) -> int {
+        if (node_type == "LPF") {return 0;}
+        if (node_type == "HPF") {return 1;}
+        if (node_type == "Low Shelf") {return 2;}
+        if (node_type == "High Shelf") {return 3;}
+        if (node_type == "Notch") {return 4;}
+        if (node_type == "Peak") {return 5;}
+        return 5;
+    }
+
     changed num_nodes => {
         self.eq_nodes = initialize_eq_nodes(self.num_nodes, min_freq, max_freq);
         self.eq_graph_fill_cmds = request_eq_fill_response(root.eq_nodes, root.min_freq, root.max_freq, root.min_gain, root.max_gain, root.draw_area_width, root.draw_area_height);
@@ -207,7 +217,13 @@ export component ParametricEq {
                     if (root.is_hovered) {
                         root.eq_changed = true;
                         root.eq_nodes[hovered_node].freq = Math.max(root.min_freq, Math.min(root.max_freq, x_to_freq(self.mouse-x)));
-                        root.eq_nodes[hovered_node].gain = Math.max(root.min_gain, Math.min(root.max_gain, y_to_gain(self.mouse-y)));
+                        if (root.eq_nodes[hovered_node].f_type == "HPF" ||
+                            root.eq_nodes[hovered_node].f_type == "LPF" ||
+                            root.eq_nodes[hovered_node].f_type == "Notch") {
+                            root.eq_nodes[hovered_node].gain = 0;
+                        } else {
+                            root.eq_nodes[hovered_node].gain = Math.max(root.min_gain, Math.min(root.max_gain, y_to_gain(self.mouse-y)));
+                        }
 
                         hovered_node_x = self.mouse-x;
                         hovered_node_y = self.mouse-y;
@@ -287,9 +303,10 @@ export component ParametricEq {
                             }
 
                             // Q, BW and S
-                            if (node.f_type == "Peak"):  LabelledInput {
+                            LabelledInput {
                                 property <float> q: Math.floor(node.q * 100) / 100;
-                                label: "Q: ";
+                                label: (node.f_type == "LPF" || node.f_type == "HPF" || node.f_type == "Low Shelf" || node.f_type == "High Shelf") ? "Slope: " : 
+                                        node.f_type == "Notch" ? "Bandwidth: " : "Q: ";
                                 value: { q }
                                 changed q => {
                                     self.value = q;
@@ -305,43 +322,6 @@ export component ParametricEq {
                                     set_eq_and_draw();
                                 }
                             }
-                            if (node.f_type == "LPF" || node.f_type == "HPF" || node.f_type == "Low Shelf" || node.f_type == "High Shelf"): LabelledInput {
-                                property <float> q: Math.floor(node.q * 100) / 100;
-                                label: "Slope: ";
-                                value: { q }
-                                changed q => {
-                                    self.value = q;
-                                }
-                                units: "";
-                                is_int: false;
-                                min: root.min_q;
-                                max: root.max_q;
-                                text_color: Palette.accent1;
-                                input_background: Palette.secondary.darker(20%);
-                                accepted(val) => {
-                                    eq_nodes[i].q = val;
-                                    set_eq_and_draw();
-                                }
-                            }
-                            if (node.f_type == "Notch"): LabelledInput {
-                                property <float> q: Math.floor(node.q * 100) / 100;
-                                label: "Bandwidth: ";
-                                value: { q }
-                                changed q => {
-                                    self.value = q;
-                                }
-                                units: "";
-                                is_int: false;
-                                min: root.min_q;
-                                max: root.max_q;
-                                text_color: Palette.accent1;
-                                input_background: Palette.secondary.darker(20%);
-                                accepted(val) => {
-                                    eq_nodes[i].q = val;
-                                    set_eq_and_draw();
-                                }
-                            }
-
 
                             ComboBox {
                                 width: self.min-width;
@@ -349,10 +329,13 @@ export component ParametricEq {
                                 x: parent.width / 2 - self.width / 2;
                                 background: Palette.accent1.darker(30%);
                                 text_color: Palette.textcol;
-                                current_index: 5;
+                                current_index: into_index(node.f_type);
                                 options: ["LPF", "HPF", "Low Shelf", "High Shelf", "Notch", "Peak"];
                                 selected(val) => {
                                     eq_nodes[i].f_type = val;
+                                    if (val == "LPF" || val == "HPF" || val == "Notch") {
+                                        eq_nodes[i].gain = 0;
+                                    }
                                     set_eq_and_draw();
                                 }
                             }

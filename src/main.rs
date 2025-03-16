@@ -140,10 +140,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut nodes = Vec::new();
         let min_freq: f32 = 20.;
         let max_freq: f32 = 20000.;
-        for i in 0..n {
+
+        nodes.push(NodeData { f_type: "HPF".into(), gain: 0., freq: min_freq + 10., q: 1.0 });
+        for i in 1..(n-1) {
             let freq = (min_freq * (max_freq / min_freq).powf(i as f32 / (n as f32 - 1.0))).round();
             nodes.push(NodeData { f_type: "Peak".into(), gain: 0., freq, q: 1.0 });
         }
+        nodes.push(NodeData { f_type: "High Shelf".into(), gain: 0., freq: max_freq / 2., q: 1.0 });
         return ModelRc::new(Rc::new(VecModel::from(nodes)));
     });
 
