@@ -3,10 +3,10 @@ use std::f32::consts::TAU;
 use crate::util::logspace;
 
 pub struct EqNode {
-    filter_type: FilterType,
-    freq: f32,
-    gain: f32,
-    q: f32,
+    pub filter_type: FilterType,
+    pub freq: f32,
+    pub gain: f32,
+    pub q: f32,
 }
 
 pub struct ParametricEq {
@@ -32,7 +32,7 @@ impl ParametricEq {
         self.filters = vec![];
     }
 
-    //pub fn add_biquad(&mut self, node: Biquad) {
+    //pub fn add_biquad(&mut self, filter_type: FilterType, node: Biquad) {
     //    self.nodes.push(node);
     //}
     
@@ -94,12 +94,13 @@ impl FilterType {
     }
 }
 
+#[derive(Debug)]
 pub struct Biquad {
-    b0: f32,
-    b1: f32,
-    b2: f32,
-    a1: f32,
-    a2: f32,
+    pub b0: f32,
+    pub b1: f32,
+    pub b2: f32,
+    pub a1: f32,
+    pub a2: f32,
     z1: f32,
     z2: f32,
     sample_rate: u32,
@@ -198,17 +199,17 @@ impl Biquad {
         out
     }
 
-    //pub fn with_coefficients(b0: f32, b1: f32, b2: f32, a1: f32, a2: f32, sample_rate: u32) -> Self {
-    //    let mut out = Self {
-    //        b0, b1, b2, a1, a2,
-    //        z1: 0.,
-    //        z2: 0.,
-    //        sample_rate,
-    //        ref_value: 0.
-    //    };
-    //    out.find_ref_value();
-    //    out
-    //}
+    pub fn with_coefficients(b0: f32, b1: f32, b2: f32, a1: f32, a2: f32, sample_rate: u32) -> Self {
+        let mut out = Self {
+            b0, b1, b2, a1, a2,
+            z1: 0.,
+            z2: 0.,
+            sample_rate,
+            ref_value: 0.
+        };
+        out.find_ref_value();
+        out
+    }
 
     fn find_ref_value(&mut self) {
         // take samples along frequency range, finding the value closest to unity gain 

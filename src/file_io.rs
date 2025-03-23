@@ -6,7 +6,7 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 //use crate::{audio::FreqData, audio::ShortTimeDftData, audio::WindowFunction, util::get_arr_from_slice};
 use crate::util::get_arr_from_slice;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct WavInfo {
     pub sample_type: u8,
     pub channels: u8,
@@ -82,8 +82,8 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
 
     //only really reading this stuff for potential future use, its not used at the moment
     let ext_size: u8;
-    let _v_bits_per_sample: u8; // information about the precision of IEEE floats in file, unused here
-    let _channel_mask: u32; // mapping from channels to physical speakers, isnt used here
+    let _v_bits_per_sample: u8; // information about the precision of IEEE floats in file
+    let _channel_mask: u32; // mapping from channels to physical speakers
     let _subformat: String;
 
     // bit depths of 8 or less in PCM use offset binary instead of 
@@ -100,7 +100,7 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
                 _v_bits_per_sample = read_le_uint(f, 2) as u8;
                 _channel_mask = read_le_uint(f, 4);
                 // files with extension data store the actual format code
-                // late in the file so now we read it in again ...
+                // later in the file so now we read it in again ...
                 fmt_code = read_le_uint(f, 2) as u8;
             }
         },
