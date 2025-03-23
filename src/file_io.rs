@@ -169,7 +169,7 @@ pub fn read_data(
                             output[j][i] = (((data[ch_offset + 1] as i32) << 24
                                 | (data[ch_offset] as i32) << 16)
                                 >> 16) as f32
-                                / 0xFFFF as f32;
+                                / 0x7FFF as f32;
                         }
                     }
                 }
@@ -183,7 +183,7 @@ pub fn read_data(
                                 | (data[ch_idx + 1] as i32) << 16
                                 | (data[ch_idx] as i32) << 8)
                                 >> 8) as f32
-                                / 0xFFFFFF as f32;
+                                / 0x7FFFFF as f32;
                         }
                     }
                 }
@@ -197,7 +197,7 @@ pub fn read_data(
                                 | (data[ch_offset + 2] as i32) << 16
                                 | (data[ch_offset + 1] as i32) << 8)
                                 | (data[ch_offset] as i32)) as f32
-                                / (i32::MAX) as f32;
+                                / (0x7FFFFFFF) as f32;
                         }
                     }
                 }

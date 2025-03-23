@@ -37,7 +37,7 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
         stage2.process(&mut samples[c]);
     }
 
-    let samples_squared = samples.iter().map(|v| v.iter().map(|&x| x.powi(2)).collect::<Vec<f32>>()).collect::<Vec<Vec<f32>>>();
+    let samples_squared = samples.iter().map(|v| v.iter().map(|&x| x.powf(2.)).collect::<Vec<f32>>()).collect::<Vec<Vec<f32>>>();
 
     let samples_per_block = (0.4 * metadata.sample_rate as f32).round() as usize;
     let step_size = (0.25 * samples_per_block as f32).round() as usize;
@@ -45,7 +45,7 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
     let mut mean_squares = vec![vec![]; metadata.channels as usize];
     for c in 0..metadata.channels as usize {
         let mut i = 0;
-        while i + samples_per_block < samples_squared[0].len() {
+        while i + samples_per_block < samples_squared[c].len() {
             let mean = samples_squared[c][i..i+samples_per_block].iter().sum::<f32>() / samples_per_block as f32;
             mean_squares[c].push(mean);
             i += step_size;
@@ -53,10 +53,8 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
     }
 
     //first gating stage
-    println!("{}, {}", mean_squares.len(), mean_squares[0].len());
     let gamma_a = -70.;
     mean_squares = filter_blocks(mean_squares, gamma_a);
-    println!("{}, {}", mean_squares.len(), mean_squares[0].len());
 
     let mut gamma_r = 0.;
     for c in 0..metadata.channels as usize {
@@ -68,7 +66,6 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
     //second gating stage
     println!("{}", gamma_r);
     mean_squares = filter_blocks(mean_squares, gamma_r);
-    println!("{}, {}", mean_squares.len(), mean_squares[0].len());
 
     let mut final_loudness_sum = 0.;
     for c in 0..metadata.channels as usize {
