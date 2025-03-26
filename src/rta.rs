@@ -2,13 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use cpal::{default_host, traits::{DeviceTrait, HostTrait, StreamTrait}, InputCallbackInfo, SampleRate, Stream, SupportedStreamConfigRange};
 
-use crate::fft::Fft;
+use crate::{circular_buffer::CircularBuffer, fft::Fft};
 use crate::audio::{FreqData, WindowFunction};
 
 pub struct RTA {
-    cache_size: usize,
-    cached_samples: Vec<f32>,
-    samples_start: usize,
+    cached_samples: CircularBuffer,
     fft: Fft,
 }
 
@@ -16,33 +14,17 @@ impl RTA {
     pub fn new(num_samples: usize, sample_rate: u32) -> Self {
         let fft = Fft::new(sample_rate, num_samples, WindowFunction::Square);
         Self {
-            cache_size: num_samples,
-            cached_samples: vec![0.; num_samples],
-            samples_start: 0,
+            cached_samples: CircularBuffer::new(num_samples),
             fft,
         }
     }
 
     pub fn update(&mut self, data: &[f32]) {
-        if data.len() > self.cache_size {
-            panic!("Cannot have larger data chunks than cache size!");
-        }
-
-        let start_idx = (self.samples_start + self.cache_size - data.len()) % self.cache_size;
-
-        for i in 0..data.len() {
-            self.cached_samples[(start_idx + i) % self.cache_size] = data[i];
-        }
-        self.samples_start += data.len();
-        self.samples_start %= self.cache_size;
+        self.cached_samples.append_slice(data);
     }
 
     pub fn get_fft(&self) -> Vec<FreqData> {
-        let mut in_order_buf = Vec::with_capacity(self.cache_size);
-        for i in 0..self.cache_size {
-            in_order_buf.push(self.cached_samples[(self.samples_start + i) % self.cache_size]);
-        }
-        self.fft.process(&in_order_buf)
+        self.fft.process(self.cached_samples.get_ordered().as_slice())
     }
 }
 

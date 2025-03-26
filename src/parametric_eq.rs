@@ -32,6 +32,12 @@ impl ParametricEq {
         self.filters = vec![];
     }
 
+    pub fn reset_filter_mem(&mut self) {
+        for f in self.filters.iter_mut() {
+            f.reset_mem();
+        }
+    }
+
     //pub fn add_biquad(&mut self, filter_type: FilterType, node: Biquad) {
     //    self.nodes.push(node);
     //}
@@ -96,11 +102,11 @@ impl FilterType {
 
 #[derive(Debug)]
 pub struct Biquad {
-    pub b0: f32,
-    pub b1: f32,
-    pub b2: f32,
-    pub a1: f32,
-    pub a2: f32,
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
     z1: f32,
     z2: f32,
     sample_rate: u32,
@@ -199,6 +205,11 @@ impl Biquad {
         out
     }
 
+    pub fn reset_mem(&mut self) {
+        self.z1 = 0.;
+        self.z2 = 0.;
+    }
+
     pub fn with_coefficients(b0: f32, b1: f32, b2: f32, a1: f32, a2: f32, sample_rate: u32) -> Self {
         let mut out = Self {
             b0, b1, b2, a1, a2,
@@ -228,7 +239,7 @@ impl Biquad {
     } 
 
     //process a single sample
-    fn process(&mut self, sample: f32) -> f32 {
+    pub fn process(&mut self, sample: f32) -> f32 {
         let out = self.b0 * sample + self.z1;
         self.z1 = self.b1 * sample + self.z2 - self.a1 * out;
         self.z2 = self.b2 * sample - self.a2 * out;

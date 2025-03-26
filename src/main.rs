@@ -1,7 +1,9 @@
 mod audio;
+mod circular_buffer;
 mod fft;
 mod file_analyzer;
 mod file_io;
+mod fir_filter;
 mod img_generator;
 mod parametric_eq;
 mod players;
@@ -9,13 +11,12 @@ mod rta;
 mod util;
 
 use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
-use file_analyzer::analyze_file;
 use file_io::{read_data, read_wav_meta, read_wav_sample_rate};
 use img_generator::{
     generate_eq_fill_response, generate_eq_response, generate_rta_line, generate_spectrogram_img,
     generate_waveform_img, generate_waveform_preview,
 };
-use parametric_eq::{FilterType, ParametricEq, Biquad};
+use parametric_eq::{FilterType, ParametricEq};
 use players::AudioPlayer;
 use rta::ExternalRta;
 use util::*;
@@ -46,9 +47,6 @@ slint::include_modules!();
 // {"Prussian blue":"273043","Cool gray":"aaadc4","Chamoisee":"8f7e4f","Magenta haze":"a14a76","Carmine":"9b1d20"}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
-    println!("{:?}", analyze_file("./res/audio/11 Raining On Prom Night.wav".into()));
-    panic!();
 
     if !Path::new("./res/").exists() {
         println!("\"./res\" directory does not exist. Creating res directory...");
@@ -363,7 +361,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let file_dur = file_info.audio_duration;
                     let sample_rate = file_info.sample_rate;
 
-                    let samples = read_data(&mut reader, file_info, 0., file_dur).unwrap();
+                    let samples = read_data(&mut reader, &file_info, 0., file_dur).unwrap();
                     let window_func = WindowFunction::from_str(window_type.as_str()).unwrap();
 
                     let stdft = do_short_time_fourier_transform(
@@ -401,7 +399,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let file_info = read_wav_meta(&mut reader);
                 let file_dur = file_info.audio_duration;
 
-                let samples = read_data(&mut reader, file_info, 0., file_dur).unwrap();
+                let samples = read_data(&mut reader, &file_info, 0., file_dur).unwrap();
 
                 let img = generate_waveform_img(imgx as u32, imgy as u32, samples);
 

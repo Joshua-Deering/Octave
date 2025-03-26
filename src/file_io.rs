@@ -7,6 +7,51 @@ use std::io::{BufReader, Read, Seek, SeekFrom};
 use crate::util::get_arr_from_slice;
 
 #[derive(Clone, Debug)]
+pub enum SpeakerPos {
+    FrontLeft = 0x1,
+    FrontRight = 0x2,
+    BackLeft = 0x10,
+    BackRight = 0x20,
+    FrontLeftOfCenter = 0x40,
+    FrontRightOfCenter = 0x80,
+    BackCenter = 0x100,
+    SideLeft = 0x200,
+    SideRight = 0x400,
+    TopCenter = 0x800,
+    TopFrontLeft = 0x1000,
+    TopFrontCenter = 0x2000,
+    TopFrontRight = 0x4000,
+    TopBackLeft = 0x8000,
+    TopBackCenter = 0x10000,
+    TopBackRight = 0x20000,
+    Reserved = 0x80000000,
+}
+
+impl From<u32> for SpeakerPos {
+    fn from(value: u32) -> Self {
+        match value {
+            0x1 => Self::FrontLeft,
+            0x2 => Self::FrontRight,
+            0x10 => Self::BackLeft,
+            0x20 => Self::BackRight,
+            0x40 => Self::FrontLeftOfCenter,
+            0x80 => Self::FrontRightOfCenter,
+            0x100 => Self::BackCenter,
+            0x200 => Self::SideLeft,
+            0x400 => Self::SideRight,
+            0x800 => Self::TopCenter,
+            0x1000 => Self::TopFrontLeft,
+            0x2000 => Self::TopFrontCenter,
+            0x4000 => Self::TopFrontRight,
+            0x8000 => Self::TopBackLeft,
+            0x10000 => Self::TopBackCenter,
+            0x20000 => Self::TopBackRight,
+            _ => Self::Reserved,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct WavInfo {
     pub sample_type: u8,
     pub channels: u8,
@@ -18,6 +63,7 @@ pub struct WavInfo {
     pub chunks: HashMap<String, (u64, u32)>, // {chunk_name: (position, chunk_size)}
     pub file_size: u32,
     pub audio_duration: f32,
+    pub channel_map: HashMap<u8, SpeakerPos>,
 }
 
 impl WavInfo {
@@ -28,6 +74,7 @@ impl WavInfo {
         bit_depth: u32,
         file_size: u32,
         chunks: HashMap<String, (u64, u32)>,
+        channel_map: HashMap<u8, SpeakerPos>,
     ) -> Self {
         let byte_depth = bit_depth / 8;
         let audio_duration = chunks.get("data").unwrap().1 as f32
@@ -43,6 +90,7 @@ impl WavInfo {
             chunks,
             file_size,
             audio_duration,
+            channel_map
         }
     }
 }
@@ -83,8 +131,11 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     //only really reading this stuff for potential future use, its not used at the moment
     let ext_size: u8;
     let _v_bits_per_sample: u8; // information about the precision of IEEE floats in file
-    let _channel_mask: u32; // mapping from channels to physical speakers
     let _subformat: String;
+    
+    // mapping from channels to physical speakers
+    let mut channel_mask_num: u32 = 3; //default is 3 for just front_left and front_right
+                                   
 
     // bit depths of 8 or less in PCM use offset binary instead of 
     // 2's complement which idk how to parse so ..
@@ -98,7 +149,7 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
             ext_size = read_le_uint(f, 2) as u8;
             if ext_size > 0 {
                 _v_bits_per_sample = read_le_uint(f, 2) as u8;
-                _channel_mask = read_le_uint(f, 4);
+                channel_mask_num = read_le_uint(f, 4);
                 // files with extension data store the actual format code
                 // later in the file so now we read it in again ...
                 fmt_code = read_le_uint(f, 2) as u8;
@@ -107,6 +158,20 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
         _ => {
             panic!("Unknown format code!");
         }
+    }
+
+    //assign the channel map
+    let mut cur_map = channel_mask_num;
+    let mut cur_ch = 0;
+    let mut channel_map = HashMap::new();
+    let mut i = 0;
+    while cur_ch < channels && i < 32 {
+        if cur_map & 1 != 0 {
+            channel_map.insert(cur_ch, SpeakerPos::from(2f32.powi(i as i32) as u32)); 
+            cur_ch += 1;
+        }
+        cur_map >>= 1;
+        i += 1;
     }
 
     f.seek(SeekFrom::Start(0)).unwrap();
@@ -121,12 +186,12 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     }
 
     f.seek(SeekFrom::Start(0)).unwrap();
-    WavInfo::new(fmt_code, channels, sample_rate, bit_depth, f_size, chunks)
+    WavInfo::new(fmt_code, channels, sample_rate, bit_depth, f_size, chunks, channel_map)
 }
 
 pub fn read_data(
     f: &mut BufReader<File>,
-    file_info: WavInfo,
+    file_info: &WavInfo,
     start_time: f32,
     duration: f32,
 ) -> Option<Vec<Vec<f32>>> {

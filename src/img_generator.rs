@@ -16,7 +16,7 @@ pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32)
     let duration = file_info.audio_duration;
     let channels = file_info.channels as usize;
 
-    let samples = read_data(&mut file, file_info, 0., duration).unwrap();
+    let samples = read_data(&mut file, &file_info, 0., duration).unwrap();
     let total_samples = samples[0].len();
     let samples_per_pixel = total_samples as f32 / imgx;
 
