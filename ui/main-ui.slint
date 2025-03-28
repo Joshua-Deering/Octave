@@ -1,0 +1,763 @@
+import { Slider } from "./slider.slint";
+import { ParametricEq, NodeData } from "./parametric-eq.slint";
+import { Palette } from "./colors.slint";
+import { Button } from "./button.slint";
+import { ComboBox } from "./combobox.slint";
+import { LabelledInput } from "./labelled-input.slint";
+import { LoadingSpinner } from "./loading-spinner.slint";
+import { LogGraph } from "./log-graph.slint";
+import { ToggleBox } from "./toggle-box.slint";
+
+struct FileResults {
+    // File information
+    sample_type_str: string,
+    channels: int,
+    sample_rate: int,
+    data_rate: int,
+    data_block_size: int,
+    bit_depth: int,
+    file_size: int,
+    channel_map: [string],
+
+    // Audio information
+    audio_duration: float,
+    lkfs_i: float,
+    lkfs_s: float,
+    lkfs_m: float,
+    true_peaks: [float],
+}
+
+export component MainUi {
+    // AUDIO PLAYER PROPERTIES ----------------------------
+    callback init_menu(menu: int);
+    callback toggle_play(state: bool);
+    callback file_select(file: string);
+    callback slider_released(pos: float);
+    callback render_waveform(file: string, imgx: length, imgy: length);
+    pure callback init_eq_nodes(num_nodes: int) -> [NodeData];
+    pure callback set_eq(nodes: [NodeData]);
+    pure callback request_eq_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
+    pure callback request_eq_fill_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
+
+    in property <int> cur_menu;
+    
+    in property <[string]> player_audio_files;
+    in-out property <bool> is_playing: false;
+    in-out property <string> selected_file: "";
+    in property <float> file_duration;
+
+    in-out property <float> slider_pos: 0;
+    out property <bool> slider_pressed;
+
+    property <length> imgx: root.width;
+    property <length> imgy: 100px;
+    in property <image> waveform_img;
+
+    pure function format_time(seconds: float) -> string {
+        return floor(seconds / 60) + ":" + (floor(Math.mod(seconds, 60)) < 10 ? "0" : "") + floor(Math.mod(seconds, 60));
+    }
+    // END AUDIO PLAYER PROPERTIES ------------------------
+
+    // VISUALIZER PROPERTIES ------------------------------
+    callback generate_spectrogram(file: string, imgx: length, imgy: length, window_size: int, overlap: float, window_function: string);
+    callback generate_waveform(file: string, imgx: length, imgy: length);
+        
+    property <length> vis_width;
+    property <length> vis_height;
+    in property <image> vis_source;
+
+    in property <[string]> vis_audio_files;
+    out property <string> vis_file;
+
+    in-out property <bool> vis_loading: false;
+    property <[string]> vis_types: ["Spectrogram", "Waveform"];
+    property <string> cur_vis: "";
+
+    out property <int> stdft_window_size: 50;
+    out property <int> stdft_overlap: 0;
+    property <float> max_overlap: 90;
+    property <[string]> window_opts: ["Square", "Hann"];
+    property <string> stdft_window_func: "";
+
+    property <int> waveform_img_height: 100;
+    // END VISUALIZER PROPERTIES --------------------------
+
+    // REAL-TIME ANALYZER PROPERTIES ----------------------
+    callback start_rta(rta_type: string, rta_response: string);
+    callback stop_rta();
+    pure callback req_rta_img(imgx: length, imgy: length, min_freq: float, max_freq: float, min_level: float, max_level: float, octave_bandwidth: float) -> string;
+    
+    property <string> rta_line_src;
+    property <bool> rta_running;
+
+    property <string> rta_type: "External";
+    property <string> rta_response: "Slow";
+    property <float> rta_bandwidth: 1.0/12.0;
+    // END REAL-TIME ANALYZER PROPERTIES ------------------
+
+    // FILE ANALYZER PROPERTIES ---------------------------
+    callback analyze_file(string);
+
+    in property <[string]> f_analyzer_files;
+    property <string> f_analyzer_selected_file;
+    in property <FileResults> cur_f_results;
+
+    in-out property <bool> analyzing_file;
+    in-out property <bool> analyzing_finished;
+
+    if (cur_menu == 0): VerticalLayout {
+        init => {
+            init_menu(0);
+            param_eq.eq_graph_cmds = request_eq_response(param_eq.eq_nodes, param_eq.min_freq, param_eq.max_freq, param_eq.min_gain, param_eq.max_gain, param_eq.draw_area_width, param_eq.draw_area_height);
+            param_eq.eq_graph_fill_cmds = request_eq_fill_response(param_eq.eq_nodes, param_eq.min_freq, param_eq.max_freq, param_eq.min_gain, param_eq.max_gain, param_eq.draw_area_width, param_eq.draw_area_height);
+        }
+        width: 100%;
+        height: 100%;
+
+        Rectangle {
+            param_eq := ParametricEq {
+                initialize_eq_nodes(n) => {
+                    root.init_eq_nodes(n)
+                }
+                request_eq_response(n, lf, hf, min_gain, max_gain, x, y) => {
+                    root.request_eq_response(n, lf, hf, min_gain, max_gain, x, y)
+                }
+                request_eq_fill_response(n, lf, hf, min_gain, max_gain, x, y) => {
+                    root.request_eq_fill_response(n, lf, hf, min_gain, max_gain, x, y)
+                }
+                set_eq(nodes) => {
+                    root.set_eq(nodes);
+                }
+            }
+        }
+        Rectangle {
+            background: Palette.primary;
+            height: 75px;
+            width: 100%;
+
+            VerticalLayout {
+                alignment: start;
+                Text {
+                    text: "Select a file:";
+                    color: Palette.textcol;
+                }
+                ComboBox {
+                    width: 200px;
+                    x: 0;
+                    options: root.player_audio_files;
+                    background: Palette.secondary;
+                    text_color: Palette.textcol;
+                    selected(val) => {
+                        root.selected_file = val;
+                        root.is_playing = false;
+                        root.file_select(val);
+                        root.render_waveform(val, root.imgx, root.imgy);
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: end;
+                padding-bottom: 5px;
+                spacing: 5px;
+                Button {
+                    width: 80px;
+                    height: 40px;
+                    x: (root.width / 2) - 40px;
+                    text: root.is_playing ? "stop" : "start";
+                    background: Palette.primary.darker(-20%);
+                    text_color: Palette.textcol;
+                    clicked => {
+                        root.is_playing = !root.is_playing;
+                        toggle_play(root.is_playing);
+                    }
+                }
+                Rectangle {
+                    progress_bar := Slider {
+                        enabled: root.is_playing;
+                        width: 400px;
+                        value: root.slider_pos;
+                        left_label: format_time(self.value / 100 * file_duration);
+                        right_label: format_time(file_duration);
+                        label_color: Palette.textcol;
+                        handle_color: Palette.accent2;
+                        handle-pressed-changed(state) => {
+                            root.slider_pressed = state;
+                        }
+                        changed(value) => {
+                            root.slider_pos = value;
+                        }
+                        released(pos) => {
+                            root.slider_released(self.value)
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: 80px;
+            width: 100%;
+            background: Palette.primary;
+            Image {
+                height: 100px;
+                width: 100%;
+                source: waveform_img;
+                image-rendering: pixelated;
+    }
+            Rectangle {
+                background: white;
+                visible: root.is_playing;
+                width: 1px;
+                height: 100px;
+                x: root.slider_pos / 100 * root.width;
+            }
+        }
+    }
+
+    if (cur_menu == 1): VerticalLayout {
+        init => {
+            root.cur_vis = "";
+            root.vis_file = "";
+            root.stdft_window_func = "";
+        }
+        width: 100%;
+        height: 100%;
+        Rectangle {
+            height: 80%;
+            width: 100%;
+            init => {
+                vis_width = self.width;
+                vis_height = self.height;
+            }
+            changed width => {
+                vis_width = self.width;
+            }
+            changed height => {
+                vis_height = self.height;
+                if (cur_vis == "Waveform" && root.waveform_img_height * 1px > self.height) {
+                    root.waveform_img_height = self.height / 1px;
+                }
+            }
+
+            background: Palette.primary;
+            
+            Image {
+                width: 100%;
+                height: 100%;
+                source: root.vis_source;
+                image-rendering: pixelated;
+                image-fit: ImageFit.contain;
+            }
+        }
+        Rectangle {
+            background: Palette.primary.darker(10%);
+            width: 100%;
+            height: 20%;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 30px;
+                
+                VerticalLayout {
+                    alignment: space-around;
+                    Text {
+                        text: "Select a visualization";
+                        color: Palette.textcol;
+                    }
+                    vis_type := ComboBox {
+                        width: 200px;
+                        x: 0;
+                        options: root.vis_types;
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        selected(val) => {
+                            root.cur_vis = val;
+                            //clear the settings from spectrogram when waveform is selected
+                            if (root.cur_vis == "Waveform") {
+                                root.stdft_window_func = "";
+                            }
+                        }
+                    }
+                    Text {
+                        text: "Select a file:";
+                        color: Palette.textcol;
+                    }
+                    ComboBox {
+                        width: 200px;
+                        x: 0;
+                        options: root.vis_audio_files;
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        selected(val) => {
+                            root.vis_file = val;
+                        }
+                    }
+                }
+
+                
+                if (root.cur_vis == "Spectrogram"): VerticalLayout {
+                    alignment: center;
+                    LabelledInput {
+                        label: "Window Size:";
+                        units: "ms";
+                        min: 5;
+                        max: 1000;
+                        value: root.stdft_window_size;
+                        input_background: Palette.secondary.transparentize(50%);
+                        text_color: Palette.textcol;
+                        changed value => {
+                            root.stdft_window_size = self.value;
+                        }
+                    }
+                    Text {
+                        horizontal-alignment: center;
+                        text: "Window Overlap: " + root.stdft_overlap + "%";
+                        color: Palette.textcol;
+                    }
+                    Slider {
+                        enabled: true;
+                        width: 150px;
+
+                        value: root.stdft_overlap;
+                        maximum: 90;
+
+                        left_label: "0";
+                        right_label: "90";
+                        label_color: Palette.textcol;
+                        handle_color: Palette.accent2;
+                        changed(value) => {
+                            root.stdft_overlap = (value / 10).round() * 10;
+                        }
+                    }
+                    Text {
+                        horizontal-alignment: center;
+                        text: "Window Function: ";
+                        color: Palette.textcol;
+                    }
+                    ComboBox {
+                        options: root.window_opts;
+                        width: 150px;
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        selected(val) => {
+                            root.stdft_window_func = val;
+                        }
+                    }
+                }
+                if (root.cur_vis == "Waveform"): VerticalLayout {
+                    alignment: center;
+                    LabelledInput {
+                        label: "Image Height:";
+                        units: "px";
+                        min: 10;
+                        max: root.vis_height / 1px;
+                        value: root.waveform_img_height;
+                        input_background: Palette.secondary.transparentize(50%);
+                        text_color: Palette.textcol;
+                        changed value => {
+                            root.waveform_img_height = self.value;
+                        }
+                    }
+                }
+                
+                generate_btn := Button {
+                    text: "Generate!";
+                    height: 50px;
+                    y: parent.height / 2 - self.height / 2;
+                    visible: root.cur_vis != "" &&
+                             root.vis_file != "" &&
+                             (root.cur_vis == "Spectrogram" ? root.stdft_window_func != "" : true);
+                    background: Palette.accent1;
+                    text_color: Palette.textcol;
+                    clicked => {
+                        root.vis_loading = true;
+                        if (root.cur_vis == "Spectrogram") {
+                            root.generate_spectrogram(root.vis_file, root.vis_width, root.vis_height, root.stdft_window_size, root.stdft_overlap, root.stdft_window_func);
+                        } else if (root.cur_vis == "Waveform") {
+                            root.generate_waveform(root.vis_file, root.vis_width, root.waveform_img_height * 1px);
+                        }
+                    }
+                }
+                if (!generate_btn.visible): Text {
+                    vertical-alignment: center;
+                    text: "Make a selection on all parameters to generate!";
+                    color: red;
+                }
+                
+                // looks cool but currently has high CPU usage...
+                //LoadingSpinner {
+                //    y: parent.height / 2 - self.height / 2;
+                //    radius: 15px;
+                //    visible: root.vis_loading;
+                //}
+                Rectangle {
+                    width: 100px;
+                    Text {
+                        property <int> dots: 1;
+                        text: "Loading" + (dots == 1 ? "." : dots == 2 ? ".." : "...");
+                        color: Palette.textcol;
+                        vertical-alignment: center;
+                        visible: root.vis_loading;
+                        Timer {
+                            interval: 500ms;
+                            running: root.vis_loading;
+                            triggered() => {
+                                dots += 1;
+                                if (dots > 3) {
+                                    dots = 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (cur_menu == 2): VerticalLayout {
+        width: 100%;
+        height: 100%;
+        init => {
+            root.rta_running = false;
+            root.rta_response = "Slow";
+            root.rta_line_src = "";
+            root.rta_bandwidth = 1.0/12.0;
+        }
+        Rectangle {
+            background: blue;
+            height: 80%;
+
+            property <float> rta_min_freq: 20.0;
+            property <float> rta_max_freq: 20000.0;
+            property <float> rta_min_level: -60.0;
+            property <float> rta_max_level: 0.0;
+            
+            
+            LogGraph {
+                min_freq: rta_min_freq;
+                max_freq: rta_max_freq;
+                key_freqs: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+                minor_freqs: [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000, 15000];
+
+                right_axis_key_points: [-50.0, -40.0, -30.0, -20.0, -10.0];
+                right_axis_min: rta_min_level;
+                right_axis_max: rta_max_level;
+                right_axis_is_centered: false;
+                right_axis_label: "Level (dBFS)";
+
+                background: Palette.primary;
+                label_color: Palette.accent1;
+                major_line_color: Palette.secondary.transparentize(30%);
+                minor_line_color: Palette.secondary.transparentize(70%);
+                border_color: Palette.secondary;
+            }
+
+            Timer {
+                interval: 125ms;
+                running: root.rta_running;
+                triggered => {
+                    root.rta_line_src = root.req_rta_img(parent.width, parent.height, rta_min_freq, rta_max_freq, rta_min_level, rta_max_level, root.rta_bandwidth);
+                }
+            }
+
+            Path {
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: parent.width / 1px;
+                viewbox-height: parent.height / 1px;
+
+                commands: root.rta_line_src;
+                stroke-width: 1.5px;
+                stroke: Palette.accent2;
+                fill: Palette.accent2.transparentize(60%);
+            }
+        }
+        Rectangle {
+            height: 20%;
+            background: Palette.primary;
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    spacing: 15px;
+                    alignment: center;
+                    Text {
+                        text: "RTA Response:";
+                        color: Palette.textcol;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    ToggleBox {
+                        width: 60px;
+                        height: 30px;
+                        options: ["Slow", "Medium", "Fast"];
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        current_selection: 0;
+                        selected(val) => {
+                            root.rta_response = val;
+                            //if the rta is currently running, we need to re-initialize it with the new buffer size
+                            if (root.rta_running) { 
+                                root.start_rta(root.rta_type, root.rta_response);
+                            }
+                        }
+                    }
+                    Text {
+                        text: "Octave Bandwidth:";
+                        color: Palette.textcol;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+            }
+            ToggleBox {
+            width: 60px;
+            height: 30px;
+                        options: ["1/12", "1/8", "1/4", "1/2"];
+                        background: Palette.secondary;
+                        text_color: Palette.textcol;
+                        current_selection: 0;
+                        selected(val) => {
+                            rta_bandwidth = (val == "1/12" ? 1.0/12.0 : val == "1/8" ? 1.0/8.0 : val == "1/4" ? 1.0/4.0 : 1.0/2.0);
+                        }
+                    }
+                    Button {
+                        text: root.rta_running ? "Stop" : "Start";
+                        background: Palette.accent1;
+                        text_color: Palette.textcol;
+                        width: 60px;
+                        height: 30px;
+                        clicked => {
+                            if (!root.rta_running) {
+                                start_rta(root.rta_type, root.rta_response);
+                                root.rta_running = true;
+                            } else {
+                                stop_rta();
+                                root.rta_running = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (cur_menu == 3): Rectangle {
+        init => {
+            root.f_analyzer_selected_file = "";
+        }
+
+        width: 100%;
+        height: 100%;
+        background: Palette.primary;
+        
+        HorizontalLayout {
+            alignment: center;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 60%;
+                    height: 80%;
+                    background: Palette.primary.darker(-30%);
+
+                    VerticalLayout {
+                        height: 20%;
+                        y: 0;
+                        alignment: start;
+                        padding-top: 5px;
+                        spacing: 5px;
+                        Text {
+                            horizontal-alignment: center;
+                            text: "Select a File:";
+                        }
+                        ComboBox {
+                            width: 200px;
+                            height: self.min-height;
+
+                            x: (parent.width - self.width) / 2.0;
+
+                            background: Palette.secondary;
+                            text_color: Palette.textcol;
+
+                            options: root.f_analyzer_files;
+                            selected(val) => {
+                                root.f_analyzer_selected_file = val;
+                            }
+                        }
+                            
+                        if (root.f_analyzer_selected_file != ""): Button {
+                            x: (parent.width - self.width) / 2.0;
+
+                            width: self.min-width + 10px;
+                            height: 40px;
+
+                            text: "Analyze!";
+                            text_color: Palette.textcol;
+
+                            background: Palette.accent1;
+                            
+                            clicked => {
+                                root.analyzing_finished = false;
+                                root.analyzing_file = true;
+                                root.analyze_file(root.f_analyzer_selected_file);
+                            }
+                        }
+                        
+                        Text {
+                            property <int> dots: 1;
+                            text: "Analyzing" + (dots == 1 ? "." : dots == 2 ? ".." : "...");
+                            color: Palette.textcol;
+                            horizontal-alignment: center;
+                            visible: root.analyzing_file;
+                            Timer {
+                                interval: 500ms;
+                                running: root.analyzing_file;
+                                triggered() => {
+                                    dots += 1;
+                                    if (dots > 3) {
+                                        dots = 1;
+                                    }
+                                }
+                            }
+                        }
+                        
+                    }
+                    HorizontalLayout {
+                        height: 80%;
+                        y: parent.height * 0.2;
+                        alignment: center;
+                        if (root.analyzing_finished): HorizontalLayout {
+                            spacing: 50px;
+                            VerticalLayout {
+                                padding-top: 5px;
+                                spacing: 4px;
+                                alignment: start;
+
+                                Text {
+                                    text: "File Information:";
+                                    font-size: 20px;
+                                    color: Palette.textcol;
+                                }
+                                
+                                Rectangle {
+                                    height: 15px;
+                                }
+                                
+                                Text {
+                                    text: "Sample Type: " + root.cur_f_results.sample_type_str;
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "Channels: " + root.cur_f_results.channels;
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "Sample Rate: " + root.cur_f_results.sample_rate / 1000.0 + " kHz";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "Data Rate: " + root.cur_f_results.data_rate + " bits/sec";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "Data Block Size: " + root.cur_f_results.data_block_size + " bytes";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "Bit Depth: " + root.cur_f_results.bit_depth;
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "File Size: " + root.cur_f_results.file-size + " bytes";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Rectangle {
+                                    height: 5px;
+                                }
+
+                                Text {
+                                    text: "Channel Mappings:";
+                                    font-size: 14px;
+                                    padding-top: 10px;
+                                    color: Palette.textcol;
+                                }
+                                for ch[i] in root.cur_f_results.channel_map: Text {
+                                    text: "Ch " + i + ": " + ch;
+                                    color: Palette.textcol;
+                                }
+                            }
+                            VerticalLayout {
+                                padding-top: 5px;
+                                spacing: 3px;
+                                alignment: start;
+                                
+                                Text {
+                                    text: "Audio Information:";
+                                    font-size: 20px;
+                                    color: Palette.textcol;
+                                }
+
+                                Rectangle {
+                                    height: 15px;
+                                }
+
+                                Text {
+                                    text: "Audio Duration: " + round(root.cur_f_results.audio_duration * 10) / 10 + "s";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Rectangle {
+                                    height: 5px;
+                                }
+
+                                Text {
+                                    text: "LKFS Integrated: " + round(root.cur_f_results.lkfs_i * 100) / 100 + " lkfs";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "LKFS Short Term: " + round(root.cur_f_results.lkfs_s * 100) / 100 + " lkfs";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Text {
+                                    text: "LKFS Momentary:  " + round(root.cur_f_results.lkfs_m * 100) / 100 + " lkfs";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+
+                                Rectangle {
+                                    height: 5px;
+                                }
+
+                                Text {
+                                    text: "True Peak:";
+                                    font-size: 14px;
+                                    color: Palette.textcol;
+                                }
+                                
+                                for tp[i] in root.cur_f_results.true_peaks: Text {
+                                    text: root.cur_f_results.channel_map[i] + ": " + round(tp * 100) / 100 + " dBTP";
+                                    font-size: 13px;
+                                    color: Palette.textcol;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

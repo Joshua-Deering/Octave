@@ -11,6 +11,7 @@ mod rta;
 mod util;
 
 use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
+use file_analyzer::analyze_file;
 use file_io::{read_data, read_wav_meta, read_wav_sample_rate};
 use img_generator::{
     generate_eq_fill_response, generate_eq_response, generate_rta_line, generate_spectrogram_img,
@@ -47,7 +48,6 @@ slint::include_modules!();
 // {"Prussian blue":"273043","Cool gray":"aaadc4","Chamoisee":"8f7e4f","Magenta haze":"a14a76","Carmine":"9b1d20"}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     if !Path::new("./res/").exists() {
         println!("\"./res\" directory does not exist. Creating res directory...");
         create_dir("./res").unwrap();
@@ -118,6 +118,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 main_window.set_vis_audio_files(ModelRc::from(model_rc.clone()));
 
                 main_window.set_selected_file("".into());
+            }
+            3 => {
+                let files: Vec<SharedString> = query_directory("./res/audio/")
+                    .into_iter()
+                    .map(|e| SharedString::from(e))
+                    .collect();
+
+                let model_rc = Rc::new(VecModel::from(files));
+                main_window.set_f_analyzer_files(ModelRc::from(model_rc.clone()));
             }
             _ => {}
         }
@@ -485,6 +494,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             },
         );
+    }
+
+    // Analyze Audio File ------------------------------------------------------
+    {
+        let analyzer_clone = main_window.as_weak();
+        main_window.on_analyze_file( move | file: SharedString | {
+            let main_window = analyzer_clone.clone();
+
+            thread::spawn(move || {
+                let res = match analyze_file(format!("./res/audio/{}", file)) {
+                    None => {
+                        main_window.upgrade_in_event_loop(| handle | {
+                            handle.set_analyzing_file(false);
+                        }).unwrap();
+                        return;
+                    }
+                    Some(res) => res
+                };
+
+                main_window.upgrade_in_event_loop(move | handle | {
+                    let res_parsed = FileResults {
+                        sample_type_str: res.metadata.sample_type_str.into(),
+                        channels: res.metadata.channels as i32,
+                        sample_rate: res.metadata.sample_rate as i32,
+                        data_rate: res.metadata.data_rate as i32,
+                        data_block_size: res.metadata.data_block_size as i32,
+                        bit_depth: res.metadata.bit_depth as i32,
+                        file_size: res.metadata.file_size as i32,
+                        channel_map: ModelRc::new(Rc::new(VecModel::from(
+                                    res.metadata.channel_map
+                                    .iter()
+                                    .map(|(_, x)| x.to_string().into())
+                                    .collect::<Vec<SharedString>>()))),
+                        
+                        audio_duration: res.metadata.audio_duration,
+                        lkfs_i: res.lkfs_i as f32,
+                        lkfs_s: res.lkfs_s as f32,
+                        lkfs_m: res.lkfs_m as f32,
+                        true_peaks: ModelRc::new(Rc::new(VecModel::from(res.true_peaks))),
+                    };
+
+                    handle.set_cur_f_results(res_parsed);
+                    handle.set_analyzing_finished(true);
+                    handle.set_analyzing_file(false);
+                }).unwrap();
+            });
+        });
     }
 
     main_window.show()?;

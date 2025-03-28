@@ -37,10 +37,6 @@ impl ParametricEq {
             f.reset_mem();
         }
     }
-
-    //pub fn add_biquad(&mut self, filter_type: FilterType, node: Biquad) {
-    //    self.nodes.push(node);
-    //}
     
     pub fn set_sample_rate(&mut self, sample_rate: u32) {
         let mut filters = Vec::with_capacity(self.nodes.len());

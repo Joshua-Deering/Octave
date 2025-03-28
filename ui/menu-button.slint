@@ -1,0 +1,27 @@
+import { Palette } from "./colors.slint";
+
+export component MenuButton {
+    in property <color> bg;
+    in property <string> text;
+    in property <length> font-size;
+
+    callback btn_pressed();
+
+    min-width: 150px;
+    min-height: 35px;
+
+    Rectangle {
+        background: ta.pressed ? root.bg.darker(50%) : ta.has-hover ? root.bg.darker(-10%) : root.bg;
+        border-color: self.background.darker(40%);
+        ta := TouchArea {
+            clicked => { root.btn_pressed(); }
+        }
+        txt := Text {
+            wrap: no-wrap;
+            text: root.text;
+            color: Palette.textcol;
+            font-size: root.font-size;
+        }
+    }
+}
+

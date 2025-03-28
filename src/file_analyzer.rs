@@ -1,7 +1,6 @@
 use std::{fs::File, io::BufReader};
 
 use crate::circular_buffer::CircularBuffer;
-use crate::fft::Fft;
 use crate::file_io::{read_data, read_wav_meta, WavInfo};
 use crate::fir_filter::FIRFilter;
 use crate::parametric_eq::{EqNode, FilterType, ParametricEq, Biquad};

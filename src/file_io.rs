@@ -27,6 +27,34 @@ pub enum SpeakerPos {
     Reserved = 0x80000000,
 }
 
+impl SpeakerPos {
+    pub fn to_string(&self) -> String {
+        format!("{:?}", self)
+    }
+    
+    pub fn short_name(&self) -> String {
+        match *self {
+            Self::FrontLeft => "FL",
+            Self::FrontRight => "FR",
+            Self::BackLeft => "BL",
+            Self::BackRight => "BR",
+            Self::FrontLeftOfCenter => "FLC",
+            Self::FrontRightOfCenter => "FRC",
+            Self::BackCenter => "BC",
+            Self::SideLeft => "SL",
+            Self::SideRight => "SR",
+            Self::TopCenter => "TC",
+            Self::TopFrontLeft => "TFL",
+            Self::TopFrontCenter => "TFC",
+            Self::TopFrontRight => "TFR",
+            Self::TopBackLeft => "TBL",
+            Self::TopBackCenter => "TBC",
+            Self::TopBackRight => "TBR",
+            Self::Reserved => "RES",
+        }.to_string()
+    }
+}
+
 impl From<u32> for SpeakerPos {
     fn from(value: u32) -> Self {
         match value {
@@ -54,6 +82,7 @@ impl From<u32> for SpeakerPos {
 #[derive(Clone, Debug)]
 pub struct WavInfo {
     pub sample_type: u8,
+    pub sample_type_str: String,
     pub channels: u8,
     pub sample_rate: u32,
     pub data_rate: u32,
@@ -63,7 +92,7 @@ pub struct WavInfo {
     pub chunks: HashMap<String, (u64, u32)>, // {chunk_name: (position, chunk_size)}
     pub file_size: u32,
     pub audio_duration: f32,
-    pub channel_map: HashMap<u8, SpeakerPos>,
+    pub channel_map: Vec<(u8, SpeakerPos)>,
 }
 
 impl WavInfo {
@@ -74,13 +103,23 @@ impl WavInfo {
         bit_depth: u32,
         file_size: u32,
         chunks: HashMap<String, (u64, u32)>,
-        channel_map: HashMap<u8, SpeakerPos>,
+        channel_map: Vec<(u8, SpeakerPos)>,
     ) -> Self {
         let byte_depth = bit_depth / 8;
         let audio_duration = chunks.get("data").unwrap().1 as f32
             / (byte_depth * channels as u32 * sample_rate) as f32;
+
+        let sample_type_str = match sample_type {
+            1 => "PCM".to_string(),
+            3 => "IEEE Float".to_string(),
+            6 => "8-bit ITU-T G.711 A-law".to_string(),
+            7 => "8-bit ITU-T G.711 µ-law".to_string(),
+            254 => "Wav Extensible Format".to_string(),
+            _ => "Unsupported".to_string(),
+        };
         WavInfo {
             sample_type,
+            sample_type_str,
             channels,
             sample_rate,
             data_rate: sample_rate * byte_depth * channels as u32,
@@ -163,11 +202,11 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     //assign the channel map
     let mut cur_map = channel_mask_num;
     let mut cur_ch = 0;
-    let mut channel_map = HashMap::new();
+    let mut channel_map = Vec::new();
     let mut i = 0;
     while cur_ch < channels && i < 32 {
         if cur_map & 1 != 0 {
-            channel_map.insert(cur_ch, SpeakerPos::from(2f32.powi(i as i32) as u32)); 
+            channel_map.push((cur_ch, SpeakerPos::from(2f32.powi(i as i32) as u32))); 
             cur_ch += 1;
         }
         cur_map >>= 1;
