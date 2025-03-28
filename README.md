@@ -12,11 +12,14 @@ Octave is an app that has many features for analyzing and visualizing audio. Its
 * Generate Waveforms from wav files
 * Real-Time Parametric EQ
 * Real-Time-Analyzer (RTA)
+* File Analyzer
+     * LKFS/LUFS measurement
+     * True Peak Measurement
+     * File information (size, audio duration, etc.)
 
 ## Planned Features:
 * Customizable App color scheme
 * Customizable colors for visualizations
-* File Analyzer (LUFS, True Peak, etc.)
 * Support for more Wav-type formats and possibly other formats (mp3, ALAC, AAC, etc.)
 
 ## Images:
