@@ -56,11 +56,10 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
 pub fn calculate_true_peak(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> Option<Vec<f32>> {
     if metadata.sample_rate != 48000 {
         return None
-        //panic!("Only 48kHz is supported for true peak!");
     }
     
-    // first upsample to 196kHz
-    let upsampled = upsample(samples);
+    // first upsample by 4x
+    let upsampled = upsample(samples, metadata.sample_rate);
 
     // now find highest absolute magnitude(s)
     let mut ch_maxes = vec![];
@@ -80,7 +79,6 @@ pub fn calculate_true_peak(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> Optio
 // LKFS Measurements are based on: 
 // Recommendation ITU-R BS.1770-5 (11/2023) Algorithms to measure audio programme loudness and true-peak audio level
 fn calculate_file_loudness(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> (f64, f64, f64) {
-
     let mut samples = samples.clone();
 
     if metadata.sample_rate == 48000 {
@@ -115,7 +113,6 @@ fn calculate_file_loudness(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> (f64,
             stage2.reset_filter_mem();
         }
     }
-
 
     let samples_squared = samples.iter().map(|v| v.iter().map(|&x| (x as f64).powf(2.)).collect::<Vec<f64>>()).collect::<Vec<Vec<f64>>>();
 
@@ -191,40 +188,48 @@ fn calculate_file_loudness(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> (f64,
 
 // helpers for calculate_true_peak
 
-const FIR_DEGREE: usize = 12;
-const PHASE0_COEFF: [f32; 12] = [0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000, -0.0594482421875, 0.1373291015625, 0.9721679687500, -0.1022949218750, 0.0476074218750, -0.0266113281250, 0.0148925781250, -0.0083007812500];
-const PHASE1_COEFF: [f32; 12] = [-0.0291748046875, 0.0292968750000, -0.0517578125000, 0.0891113281250, -0.1665039062500, 0.4650878906250, 0.7797851562500, -0.2003173828125, 0.1015625000000, -0.0582275390625, 0.0330810546875, -0.0189208984375];
-const PHASE2_COEFF: [f32; 12] = [-0.0189208984375, 0.0330810546875, -0.0582275390625, 0.1015625000000, -0.2003173828125, 0.7797851562500, 0.4650878906250, -0.1665039062500, 0.0891113281250, -0.0517578125000, 0.0292968750000, -0.0291748046875];
-const PHASE3_COEFF: [f32; 12] = [-0.0083007812500, 0.0148925781250, -0.0266113281250, 0.0476074218750, -0.1022949218750, 0.9721679687500, 0.1373291015625, -0.0594482421875, 0.0332031250000, -0.0196533203125, 0.0109863281250, 0.0017089843750];
-fn upsample(samples: &Vec<Vec<f32>>) -> Vec<Vec<f32>> {
-    //FIR Filters
-    let phase0 = FIRFilter::new(FIR_DEGREE, PHASE0_COEFF.to_vec());
-    let phase1 = FIRFilter::new(FIR_DEGREE, PHASE1_COEFF.to_vec());
-    let phase2 = FIRFilter::new(FIR_DEGREE, PHASE2_COEFF.to_vec());
-    let phase3 = FIRFilter::new(FIR_DEGREE, PHASE3_COEFF.to_vec());
+const FIR_DEGREE_48K: usize = 12;
+const PHASE0_COEFF_48K: [f32; 12] = [0.0017089843750, 0.0109863281250, -0.0196533203125, 0.0332031250000, -0.0594482421875, 0.1373291015625, 0.9721679687500, -0.1022949218750, 0.0476074218750, -0.0266113281250, 0.0148925781250, -0.0083007812500];
+const PHASE1_COEFF_48K: [f32; 12] = [-0.0291748046875, 0.0292968750000, -0.0517578125000, 0.0891113281250, -0.1665039062500, 0.4650878906250, 0.7797851562500, -0.2003173828125, 0.1015625000000, -0.0582275390625, 0.0330810546875, -0.0189208984375];
+const PHASE2_COEFF_48K: [f32; 12] = [-0.0189208984375, 0.0330810546875, -0.0582275390625, 0.1015625000000, -0.2003173828125, 0.7797851562500, 0.4650878906250, -0.1665039062500, 0.0891113281250, -0.0517578125000, 0.0292968750000, -0.0291748046875];
+const PHASE3_COEFF_48K: [f32; 12] = [-0.0083007812500, 0.0148925781250, -0.0266113281250, 0.0476074218750, -0.1022949218750, 0.9721679687500, 0.1373291015625, -0.0594482421875, 0.0332031250000, -0.0196533203125, 0.0109863281250, 0.0017089843750];
 
-    let mut upsampled = Vec::with_capacity(samples.len());
-    for c in 0..samples.len() {
-        let mut circ_buffer = CircularBuffer::new(FIR_DEGREE);
-        for i in 0..FIR_DEGREE {
-            circ_buffer.append(samples[c][i]);
+fn upsample(samples: &Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
+    match sample_rate {
+        48000 => {
+            //FIR Filters
+            let phase0 = FIRFilter::new(FIR_DEGREE_48K, PHASE0_COEFF_48K.to_vec());
+            let phase1 = FIRFilter::new(FIR_DEGREE_48K, PHASE1_COEFF_48K.to_vec());
+            let phase2 = FIRFilter::new(FIR_DEGREE_48K, PHASE2_COEFF_48K.to_vec());
+            let phase3 = FIRFilter::new(FIR_DEGREE_48K, PHASE3_COEFF_48K.to_vec());
+
+            let mut upsampled = Vec::with_capacity(samples.len());
+            for c in 0..samples.len() {
+                let mut circ_buffer = CircularBuffer::new(FIR_DEGREE_48K);
+                for i in 0..FIR_DEGREE_48K {
+                    circ_buffer.append(samples[c][i]);
+                }
+
+                let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples[c].len() * 4);
+                for i in 0..samples[c].len() {
+                    
+                    circ_buffer.append(samples[c][i]);
+                    let history = circ_buffer.get_ordered();
+
+                    upsampled_ch.push(phase0.process(&history));
+                    upsampled_ch.push(phase1.process(&history));
+                    upsampled_ch.push(phase2.process(&history));
+                    upsampled_ch.push(phase3.process(&history));
+                }
+                upsampled.push(upsampled_ch);
+            }
+
+            upsampled
+        },
+        _ => {
+            vec![]
         }
-
-        let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples[c].len() * 4);
-        for i in 0..samples[c].len() {
-            
-            circ_buffer.append(samples[c][i]);
-            let history = circ_buffer.get_ordered();
-
-            upsampled_ch.push(phase0.process(&history));
-            upsampled_ch.push(phase1.process(&history));
-            upsampled_ch.push(phase2.process(&history));
-            upsampled_ch.push(phase3.process(&history));
-        }
-        upsampled.push(upsampled_ch);
     }
-
-    upsampled
 }
 
 // helpers for calculate_file_loudness

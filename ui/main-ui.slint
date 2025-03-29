@@ -18,6 +18,7 @@ struct FileResults {
     bit_depth: int,
     file_size: int,
     channel_map: [string],
+    channel_map_short: [string],
 
     // Audio information
     audio_duration: float,
@@ -747,9 +748,14 @@ export component MainUi {
                                     font-size: 14px;
                                     color: Palette.textcol;
                                 }
-                                
+
+                                if (root.cur_f_results.true_peaks.length == 0): Text {
+                                    text: "True Peak not available for this sample rate";
+                                    color: Palette.textcol;
+                                }
+
                                 for tp[i] in root.cur_f_results.true_peaks: Text {
-                                    text: root.cur_f_results.channel_map[i] + ": " + round(tp * 100) / 100 + " dBTP";
+                                    text: root.cur_f_results.channel_map_short[i] + ": " + round(tp * 100) / 100 + " dBTP";
                                     font-size: 13px;
                                     color: Palette.textcol;
                                 }

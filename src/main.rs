@@ -527,6 +527,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     .iter()
                                     .map(|(_, x)| x.to_string().into())
                                     .collect::<Vec<SharedString>>()))),
+                        channel_map_short: ModelRc::new(Rc::new(VecModel::from(
+                                    res.metadata.channel_map
+                                    .iter()
+                                    .map(|(_, x)| x.short_name().into())
+                                    .collect::<Vec<SharedString>>()))),
+
                         
                         audio_duration: res.metadata.audio_duration,
                         lkfs_i: res.lkfs_i as f32,

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-slint = "1.9.2"
+slint = "1.10.0"
 console-menu = "0.3.0"
 cpal = "0.15.3"
 fastapprox = "0.3.1"
@@ -12,7 +12,7 @@ image = "0.25.5"
 rand = "0.8.5"
 
 [build-dependencies]
-slint-build = "1.9.2"
+slint-build = "1.10.0"
 
 [package.metadata.bundle]
 name = "Octave"
