@@ -4,7 +4,9 @@ mod fft;
 mod file_analyzer;
 mod file_io;
 mod fir_filter;
+mod fir_filter_constants;
 mod img_generator;
+mod lookup_tables;
 mod parametric_eq;
 mod players;
 mod rta;
@@ -48,6 +50,7 @@ slint::include_modules!();
 // {"Prussian blue":"273043","Cool gray":"aaadc4","Chamoisee":"8f7e4f","Magenta haze":"a14a76","Carmine":"9b1d20"}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+
     if !Path::new("./res/").exists() {
         println!("\"./res\" directory does not exist. Creating res directory...");
         create_dir("./res").unwrap();

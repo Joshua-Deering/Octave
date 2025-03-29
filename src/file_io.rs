@@ -3,8 +3,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 
-//use crate::{audio::FreqData, audio::ShortTimeDftData, audio::WindowFunction, util::get_arr_from_slice};
-use crate::util::get_arr_from_slice;
+use crate::lookup_tables::*;
 
 #[derive(Clone, Debug)]
 pub enum SpeakerPos {
@@ -272,8 +271,8 @@ pub fn read_data(
                             let ch_offset = j * sample_size + idx;
                             output[j][i] = (((data[ch_offset + 1] as i32) << 24
                                 | (data[ch_offset] as i32) << 16)
-                                >> 16) as f32
-                                / 0x7FFF as f32;
+                                >> 16) as f32;
+                            output[j][i] /= if output[j][i] < 0. { PCM_16BIT_NEG_MAX } else { PCM_16BIT_POS_MAX };
                         }
                     }
                 }
@@ -286,8 +285,8 @@ pub fn read_data(
                             output[j][i] = (((data[ch_idx + 2] as i32) << 24
                                 | (data[ch_idx + 1] as i32) << 16
                                 | (data[ch_idx] as i32) << 8)
-                                >> 8) as f32
-                                / 0x7FFFFF as f32;
+                                >> 8) as f32;
+                            output[j][i] /= if output[j][i] < 0. { PCM_24BIT_NEG_MAX } else { PCM_24BIT_POS_MAX };
                         }
                     }
                 }
@@ -300,8 +299,8 @@ pub fn read_data(
                             output[j][j] = (((data[ch_offset + 3] as i32) << 24
                                 | (data[ch_offset + 2] as i32) << 16
                                 | (data[ch_offset + 1] as i32) << 8)
-                                | (data[ch_offset] as i32)) as f32
-                                / (0x7FFFFFFF) as f32;
+                                | (data[ch_offset] as i32)) as f32;
+                            output[j][i] /= if output[j][i] < 0. { PCM_32BIT_NEG_MAX } else { PCM_32BIT_POS_MAX };
                         }
                     }
                 }
@@ -318,8 +317,26 @@ pub fn read_data(
                 let idx = i * sample_size * channels;
                 for j in 0..channels {
                     let ch_idx = j * sample_size + idx;
-                    let dat: [u8; 4] = get_arr_from_slice(&data[ch_idx..ch_idx+sample_size]);
-                    output[j][i] = f32::from_le_bytes(dat);
+                    let dat: &[u8] = &data[ch_idx..ch_idx+sample_size];
+                    output[j][i] = f32::from_le_bytes(dat.try_into().unwrap());
+                }
+            }
+        }
+        6 => {
+            for i in 0..samples_per_channel {
+                let idx = i * sample_size * channels;
+                for j in 0..channels {
+                    let ch_idx = j * sample_size + idx;
+                    output[j][i] = ALAW_TO_PCM[data[ch_idx] as usize];
+                }
+            }
+        }
+        7 => {
+            for i in 0..samples_per_channel {
+                let idx = i * sample_size * channels;
+                for j in 0..channels {
+                    let ch_idx = j * sample_size + idx;
+                    output[j][i] = ULAW_TO_PCM[data[ch_idx] as usize];
                 }
             }
         }

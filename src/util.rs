@@ -1,17 +1,5 @@
 use std::{fs, io};
 
-#[allow(unused)]
-pub fn get_arr_from_slice(slice: &[u8]) -> [u8; 4] {
-    if slice.len() > 4 {
-        panic!("attempted to convert slice of size {} to size 4", slice.len());
-    }
-    let mut out = [0; 4];
-    for i in 0..slice.len() {
-        out[i] = slice[i];
-    }
-    out
-}
-
 pub fn query_directory(dir: &str) -> impl Iterator<Item = String> {
     let mut entries = fs::read_dir(dir)
         .unwrap()
@@ -31,7 +19,6 @@ pub fn logspace(min: f32, max: f32, num_points: usize) -> impl Iterator<Item = f
     (0..num_points).map(move |i| (log_min + step * (i as f32)).exp())
 }
 
-#[allow(unused)]
 pub fn hue_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
     let c = v * s;
     let h = h / 60.;
@@ -60,73 +47,3 @@ pub fn hue_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) {
         ((rgb1.2 + m) * 255.) as u8,
     )
 }
-
-//pub fn read_stdin_bool() -> bool {
-//    let mut inp = String::new();
-//    loop {
-//        stdin().read_line(&mut inp).expect("Failed to read stdin");
-//
-//        match inp.to_lowercase().trim() {
-//            "y" | "yes" | "true" | "t" | "1" => {
-//                return true;
-//            }
-//            "n" | "no" | "false" | "f" | "0" => {
-//                return false;
-//            }
-//            _ => {
-//                println!("Invalid Input! Please only enter yes or no (or other aliases like y/n, t/f, etc)")
-//            }
-//        }
-//        inp.clear();
-//    }
-//}
-//
-//pub fn read_stdin_u32() -> u32 {
-//    let mut inp = String::new();
-//    loop {
-//        stdin().read_line(&mut inp).expect("Failed to read stdin");
-//
-//        if let Ok(num) = inp.trim().parse::<u32>() {
-//            return num;
-//        } else {
-//            println!("Invalid input! Please only enter valid positive integers");
-//        }
-//        inp.clear();
-//    }
-//}
-//
-//pub fn read_stdin_usize(min: usize, max: usize) -> usize {
-//    let mut inp = String::new();
-//    loop {
-//        stdin().read_line(&mut inp).expect("Failed to read stdin");
-//
-//        if let Ok(num) = inp.trim().parse::<usize>() {
-//            if num < min || num > max {
-//                println!("Please only enter numbers in the range! ({} to {})", min, max);
-//            } else {
-//                return num;
-//            }
-//        } else {
-//            println!("Invalid input! Please only enter valid positive integers");
-//        }
-//        inp.clear();
-//    }
-//}
-//
-//pub fn read_stdin_f32(min: f32, max: f32) -> f32 {
-//    let mut inp = String::new();
-//    loop {
-//        stdin().read_line(&mut inp).expect("Failed to read stdin");
-//
-//        if let Ok(num) = inp.trim().parse::<f32>() {
-//            if num < min || num > max {
-//                println!("Please only enter numbers in the range! ({:.2e} to {:.2e})", min, max);
-//            } else {
-//                return num;
-//            }
-//        } else {
-//            println!("Invalid input! Please only enter valid positive integers");
-//        }
-//        inp.clear();
-//    }
-//}
