@@ -1,5 +1,73 @@
 use std::{fs, io};
 
+use crate::fft::Fft;
+use crate::audio::{FreqData, WindowFunction};
+
+#[allow(unused)]
+pub fn compare_signals(signal1: &Vec<Vec<f32>>, sample_rate1: u32, signal2: &Vec<Vec<f32>>, sample_rate2: u32) {
+    assert!(signal1.len() == signal2.len());
+    
+    let fft1 = Fft::new(sample_rate1, signal1[0].len(), WindowFunction::Square);
+    let fft2 = Fft::new(sample_rate2, signal2[0].len(), WindowFunction::Square);
+    
+    let mut fft_bins_1 = Vec::with_capacity(signal1.len());
+    for c in 0..signal1.len() {
+        fft_bins_1.push(fft_to_freq_bins(fft1.process(&signal1[c]), u32::min(sample_rate1, sample_rate2), 1./12.));
+    }
+
+    let mut fft_bins_2 = Vec::with_capacity(signal2.len());
+    for c in 0..signal2.len() {
+        fft_bins_2.push(fft_to_freq_bins(fft2.process(&signal2[c]), u32::min(sample_rate1, sample_rate2), 1./12.));
+    }
+
+    print!("Frequency 1\t");
+    for c in 0..signal1.len() {
+        print!("S1 Ch{}   \t S2 Ch{}  \t Abs. Diff    \t", c, c);
+    }
+    println!("");
+
+    for i in 0..fft_bins_1[0].len() {
+        print!("{:.3}  \t", fft_bins_1[0][i].0);
+        for c in 0..fft_bins_1.len() {
+            print!("{:.3} \t {:.3} \t {:.3} \t     ", fft_bins_1[c][i].1, fft_bins_2[c][i].1, (fft_bins_1[c][i].1.abs() - fft_bins_2[c][i].1.abs()).abs())
+        }
+        println!("");
+    }
+}
+
+fn fft_to_freq_bins(fft: Vec<FreqData>, sample_rate: u32, octave_bandwidth: f32) -> Vec<(f32, f32)> {
+    let band_multiplier = 2f32.powf(octave_bandwidth);
+
+    let mut bins = vec![];
+
+    let mut low_bound = 20.;
+    let mut fft_i = 0;
+    let mut last_fft_i = 0;
+    while low_bound < (sample_rate / 2) as f32 {
+        let mut bin_sum = 0.;
+        let upper_bound = low_bound * band_multiplier;
+
+        while fft_i < fft.len() && fft[fft_i].frequency < upper_bound  {
+            bin_sum += fft[fft_i].amplitude;
+            fft_i += 1;
+        }
+        if fft_i == last_fft_i && fft_i != 0 {
+            bins.push(bins[bins.len()-1]);
+        } else {
+            bins.push(((low_bound + upper_bound) / 2., 20. * bin_sum.log10()));
+        }
+
+        low_bound *= band_multiplier;
+
+        if fft_i >= fft.len() {
+            break;
+        }
+        last_fft_i = fft_i;
+    }
+
+    bins
+}
+
 pub fn query_directory(dir: &str) -> impl Iterator<Item = String> {
     let mut entries = fs::read_dir(dir)
         .unwrap()

@@ -5,6 +5,7 @@ use crate::file_io::{read_data, read_wav_meta, WavInfo};
 use crate::fir_filter::FIRFilter;
 use crate::parametric_eq::{EqNode, FilterType, ParametricEq, Biquad};
 use crate::fir_filter_constants::*;
+use crate::util::compare_signals;
 
 #[derive(Debug)]
 pub struct FileResults {
@@ -14,13 +15,6 @@ pub struct FileResults {
     pub lkfs_m: f64, //LKFS
     pub true_peaks: Vec<f32>, // dBTP (dB True-Peak)
 }
-
-// Stats for 11 Raining On Prom Night.wav:
-// True Peak: -0.7 dBTP
-// LKFS-M: -7.7 LKFS
-// LKFS-S: -10.1 LKFS
-// LKFS-I: -13.5 LKFS
-// LRA: 8.6
 
 pub fn analyze_file(path: String) -> Option<FileResults> {
     let file = File::open(path);
@@ -55,11 +49,7 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
 
 
 pub fn calculate_true_peak(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> Option<Vec<f32>> {
-    if metadata.sample_rate != 48000 {
-        return None
-    }
-    
-    // first upsample by 4x
+    // first upsample to 192kHz
     let upsampled = upsample(samples, metadata.sample_rate);
 
     // now find highest absolute magnitude(s)
@@ -189,41 +179,53 @@ fn calculate_file_loudness(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> (f64,
 
 // helpers for calculate_true_peak
 fn upsample(samples: &Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
+    //FIR Filters
+    let mut upsampling_filters = vec![];
+
     match sample_rate {
         48000 => {
-            //FIR Filters
-            let phase0 = FIRFilter::new(FIR_DEGREE_48K, PHASE0_COEFF_48K.to_vec());
-            let phase1 = FIRFilter::new(FIR_DEGREE_48K, PHASE1_COEFF_48K.to_vec());
-            let phase2 = FIRFilter::new(FIR_DEGREE_48K, PHASE2_COEFF_48K.to_vec());
-            let phase3 = FIRFilter::new(FIR_DEGREE_48K, PHASE3_COEFF_48K.to_vec());
-
-            let mut upsampled = Vec::with_capacity(samples.len());
-            for c in 0..samples.len() {
-                let mut circ_buffer = CircularBuffer::new(FIR_DEGREE_48K);
-                for i in 0..FIR_DEGREE_48K {
-                    circ_buffer.append(samples[c][i]);
-                }
-
-                let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples[c].len() * 4);
-                for i in 0..samples[c].len() {
-                    
-                    circ_buffer.append(samples[c][i]);
-                    let history = circ_buffer.get_ordered();
-
-                    upsampled_ch.push(phase0.process(&history));
-                    upsampled_ch.push(phase1.process(&history));
-                    upsampled_ch.push(phase2.process(&history));
-                    upsampled_ch.push(phase3.process(&history));
-                }
-                upsampled.push(upsampled_ch);
+            for f in FIR_COEFF_48K {
+                upsampling_filters.push(FIRFilter::new(FIR_UPSAMPLING_DEG, f.to_vec()));
             }
-
-            upsampled
         },
+        44100 => {
+            for f in FIR_COEFF_44_1K {
+                upsampling_filters.push(FIRFilter::new(FIR_UPSAMPLING_DEG, f.to_vec()));
+            }
+        },
+        8000 => {
+            for f in FIR_COEFF_8K {
+                upsampling_filters.push(FIRFilter::new(FIR_UPSAMPLING_DEG, f.to_vec()));
+            }
+        }
         _ => {
-            vec![]
+            panic!();
         }
     }
+
+    let mut upsampled = Vec::with_capacity(samples.len());
+    for c in 0..samples.len() {
+        let mut circ_buffer = CircularBuffer::new(FIR_UPSAMPLING_DEG);
+        for i in 0..FIR_UPSAMPLING_DEG {
+            circ_buffer.append(samples[c][i]);
+        }
+
+        let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples[c].len() * upsampling_filters.len());
+        for i in 0..samples[c].len() {
+            
+            circ_buffer.append(samples[c][i]);
+            let history = circ_buffer.get_ordered();
+
+            for filter in upsampling_filters.iter() {
+                upsampled_ch.push(filter.process(&history));
+            }
+        }
+        upsampled.push(upsampled_ch);
+    }
+
+    compare_signals(samples, sample_rate, &upsampled, 192000);
+
+    upsampled
 }
 
 // helpers for calculate_file_loudness
