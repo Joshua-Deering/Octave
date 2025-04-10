@@ -155,6 +155,10 @@ export component MainUi {
                         root.render_waveform(val, root.imgx, root.imgy);
                     }
                 }
+                Text {
+                    text: "(If a file is not in this list, it needs to be re-sampled)";
+                    color: Palette.secondary;
+                }
             }
             VerticalLayout {
                 alignment: end;

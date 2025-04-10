@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
 use crate::lookup_tables::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum SpeakerPos {
     FrontLeft = 0x1,
     FrontRight = 0x2,
@@ -51,6 +51,28 @@ impl SpeakerPos {
             Self::TopBackRight => "TBR",
             Self::Reserved => "RES",
         }.to_string()
+    }
+    
+    pub fn std_location(&self) -> u32 {
+        match *self {
+            Self::FrontLeft => 0,
+            Self::FrontRight => 1,
+            Self::BackLeft => 2,
+            Self::BackRight => 3,
+            Self::FrontLeftOfCenter => 4,
+            Self::FrontRightOfCenter => 5,
+            Self::BackCenter => 6,
+            Self::SideLeft => 7,
+            Self::SideRight => 8,
+            Self::TopCenter => 9,
+            Self::TopFrontLeft => 10,
+            Self::TopFrontCenter => 11,
+            Self::TopFrontRight => 12,
+            Self::TopBackLeft => 13,
+            Self::TopBackCenter => 14,
+            Self::TopBackRight => 15,
+            Self::Reserved => 16,
+        }
     }
 }
 
@@ -172,8 +194,7 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
     let _subformat: String;
     
     // mapping from channels to physical speakers
-    let mut channel_mask_num: u32 = 3; //default is 3 for just front_left and front_right
-                                   
+    let mut channel_mask_num: u32 = 0xFFFFFFFF; // default is all 1s, for a direct mapping
 
     // bit depths of 8 or less in PCM use offset binary instead of 
     // 2's complement which idk how to parse so ..
@@ -188,6 +209,10 @@ pub fn read_wav_meta(f: &mut BufReader<File>) -> WavInfo {
             if ext_size > 0 {
                 _v_bits_per_sample = read_le_uint(f, 2) as u8;
                 channel_mask_num = read_le_uint(f, 4);
+                if channel_mask_num == 0 {
+                    // channel mask of 0 actually indicates the default mapping
+                    channel_mask_num = 0xFFFFFFFF;
+                }
                 // files with extension data store the actual format code
                 // later in the file so now we read it in again ...
                 fmt_code = read_le_uint(f, 2) as u8;
@@ -348,69 +373,160 @@ pub fn read_data(
 
     Some(output)
 }
-//
-//pub fn write_stdft_to_file(file_dir: String, stdft: &ShortTimeDftData) {
-//    let mut file = BufWriter::new(File::create(file_dir.trim()).unwrap());
-//
-//    file.write_fmt(format_args!("{}\n", stdft.window_type.to_string()))
-//        .unwrap();
-//    file.write_all(&stdft.overlap.to_be_bytes()).unwrap();
-//    file.write_all(&stdft.num_dfts.to_le_bytes()).unwrap();
-//    file.write_all(&stdft.num_freq.to_le_bytes()).unwrap();
-//    file.write_all(&stdft.sample_rate.to_le_bytes()).unwrap();
-//    //cast to u32 to ensure data_size is written as 4 bytes, since usize can change sizes
-//    file.write_all(&(stdft.data_size as u32).to_le_bytes())
-//        .unwrap();
-//
-//    for j in 0..stdft.num_dfts as usize {
-//        for k in 0..stdft.num_freq as usize {
-//            file.write_all(&stdft.dft_data[j][k].frequency.to_be_bytes())
-//                .unwrap();
-//            file.write_all(&stdft.dft_data[j][k].amplitude.to_be_bytes())
-//                .unwrap();
-//            file.write_all(&stdft.dft_data[j][k].phase.to_be_bytes())
-//                .unwrap();
-//        }
-//    }
-//    file.flush().unwrap();
-//}
-//
-//pub fn read_stdft_from_file(file_dir: &str) -> ShortTimeDftData {
-//    let mut file = BufReader::new(File::open(file_dir).unwrap());
-//
-//    let mut window_str = String::new();
-//    file.read_line(&mut window_str).unwrap();
-//    let window_type = WindowFunction::from_str(window_str.trim()).unwrap();
-//    let mut overlap_bytes = [0; 4];
-//    file.read_exact(&mut overlap_bytes).unwrap();
-//
-//    let overlap = f32::from_be_bytes(overlap_bytes);
-//    let num_dfts = read_le_uint(&mut file, 4);
-//    let num_freq = read_le_uint(&mut file, 4);
-//    let sample_rate = read_le_uint(&mut file, 4);
-//    let data_size = read_le_uint(&mut file, 4);
-//
-//    let mut dft_data = vec![vec![FreqData::ZERO; num_freq as usize]; num_dfts as usize];
-//    for i in 0..num_dfts as usize {
-//        let mut cur_dft_dat = vec![0 as u8; num_freq as usize * 4 * 3];
-//        file.read_exact(&mut cur_dft_dat).unwrap();
-//        for (k, bytes) in cur_dft_dat.chunks(12).enumerate() {
-//            dft_data[i][k].frequency = f32::from_be_bytes(bytes[0..4].try_into().unwrap());
-//            dft_data[i][k].amplitude = f32::from_be_bytes(bytes[4..8].try_into().unwrap());
-//            dft_data[i][k].phase = f32::from_be_bytes(bytes[8..12].try_into().unwrap());
-//        }
-//    }
-//
-//    ShortTimeDftData::new_with_size(
-//        dft_data,
-//        window_type,
-//        overlap,
-//        num_dfts,
-//        num_freq,
-//        sample_rate,
-//        data_size as usize,
-//    )
-//}
+
+pub struct WavWriteInfo {
+    pub sample_type: u8,
+    pub channels: u8,
+    pub sample_rate: u32,
+    pub bit_depth: u16,
+    pub channel_mapping: Vec<(u8, SpeakerPos)>
+}
+
+pub fn write_wav_file(target_file: String, target_wav_format: &WavWriteInfo, samples: &Vec<Vec<f32>>) -> std::io::Result<()> {
+    let sample_rate = target_wav_format.sample_rate;
+    let sample_type = target_wav_format.sample_type;
+    let bit_depth = target_wav_format.bit_depth;
+    let channels = target_wav_format.channels;
+    let channel_mapping = target_wav_format.channel_mapping.clone();
+    let samples_per_channel = samples[0].len() as u32;
+
+    //check input validity
+    if samples.len() != channels as usize {return Err(Error::new(ErrorKind::InvalidInput, "Wav Format must match given samples!"));}
+    for c in 0..samples.len() {
+        if samples[c].len() != samples_per_channel as usize {
+            return Err(Error::new(ErrorKind::InvalidInput, "All channels must have the same number of samples!"));
+        }
+    }
+
+    let mut is_std_channel_map = true;
+    for i in 0..channels{
+        if channel_mapping[i as usize].0 != i {
+            is_std_channel_map = false;
+        }
+    }
+    let channel_mask: u32 = get_channel_mask(&channel_mapping);
+
+    let is_extended_fmt = sample_type != 1 || channels > 2 || !is_std_channel_map;
+    let ext_size: u16 = if is_extended_fmt && (sample_type == 1 || !is_std_channel_map) {
+        //need to specify subformat or channel mapping
+        22u16
+    } else { 0u16 };
+
+    let has_fact_chunk = sample_type == 6 || sample_type == 7;
+
+    let data_block_size: u16 = (bit_depth / 8) * channels as u16;
+    let data_rate: u32 = sample_rate * data_block_size as u32;
+
+    let fmt_chunk_size: u32 = 16 + if is_extended_fmt {2 + ext_size as u32} else {0};
+    let data_chunk_size: u32 = data_block_size as u32 * samples_per_channel;
+
+    let file_size: u32 = 4 + fmt_chunk_size as u32 + data_chunk_size + (if has_fact_chunk {4} else {0});
+
+    let mut file = BufWriter::new(File::create_new(format!("./res/audio/{}", target_file))?);
+
+    // Write RIFF Header
+    file.write_all("RIFF".as_bytes())?;
+    file.write_all(&file_size.to_le_bytes())?;
+    file.write_all("WAVE".as_bytes())?;
+
+    // Write fmt header
+    file.write_all("fmt ".as_bytes())?;
+    file.write_all(&fmt_chunk_size.to_le_bytes())?;
+
+    // if the extended chunk exists, write this as "Wav Extensible Format" (254)
+    if ext_size > 0 {
+        file.write_all(&254u16.to_le_bytes())?;
+    } else { //otherwise just write the sample type here
+        file.write_all(&(sample_type as u16).to_le_bytes())?;
+    }
+    file.write_all(&(channels as u16).to_le_bytes())?;
+    file.write_all(&sample_rate.to_le_bytes())?;
+    file.write_all(&data_rate.to_le_bytes())?;
+    file.write_all(&data_block_size.to_le_bytes())?;
+    file.write_all(&bit_depth.to_le_bytes())?;
+
+    // write the ext chunk if needed
+    if fmt_chunk_size > 16 {
+        file.write_all(&ext_size.to_le_bytes())?;
+
+        if fmt_chunk_size > 18 {
+            //this is wValidBitsPerSample, which is really just redundant
+            file.write_all(&bit_depth.to_le_bytes())?;
+            // channel mask
+            file.write_all(&channel_mask.to_le_bytes())?;
+
+            //this is SubFormat, which includes the sample type as well as a fixed string 
+            // "\x00\x00\x00\x00\x10\x00\x80\x00\x00\xAA\x00\x38\x9B\x71"
+            file.write_all(&(sample_type as u16).to_le_bytes())?;
+            file.write_all(&[0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71])?;
+        }
+    }
+
+    // write fact chunk if needed
+    if has_fact_chunk {
+        file.write_all("fact".as_bytes())?;
+        // fact chunk will always have a size of 4
+        file.write_all(&4u32.to_le_bytes())?;
+        file.write_all(&samples_per_channel.to_le_bytes())?;
+    }
+
+    // data chunk
+    file.write_all("data".as_bytes())?;
+    file.write_all(&data_chunk_size.to_le_bytes())?;
+    match sample_type {
+        1 => {
+            match bit_depth {
+                16 => {
+                    for i in 0..samples[0].len() {
+                        for c in 0..samples.len() {
+                            let sample_scaled: i16 = (samples[c][i] * if samples[c][i] > 0. {PCM_16BIT_POS_MAX} else {PCM_16BIT_NEG_MAX}) as i16;
+                            file.write_all(&sample_scaled.to_le_bytes())?;
+                        }
+                    }
+                }
+                24 => {
+                    for i in 0..samples[0].len() {
+                        for c in 0..samples.len() {
+                            let sample_scaled: i32 = (samples[c][i] * if samples[c][i] > 0. {PCM_24BIT_POS_MAX} else {PCM_24BIT_NEG_MAX}) as i32;
+                            file.write_all(&sample_scaled.to_le_bytes()[0..3])?;
+                        }
+                    }
+                }
+                32 => {
+                    for i in 0..samples[0].len() {
+                        for c in 0..samples.len() {
+                            let sample_scaled: i32 = (samples[c][i] * if samples[c][i] > 0. {PCM_32BIT_POS_MAX} else {PCM_32BIT_NEG_MAX}) as i32;
+                            file.write_all(&sample_scaled.to_le_bytes())?;
+                        }
+                    }
+                }
+                _ => {
+
+                }
+            }
+        },
+        3 => {
+            // idk how to parse f32s into IEEE floats of 16 or 24 bits so..
+            return Err(Error::new(ErrorKind::Unsupported, "Unsupported sample format!"));
+        }
+        _ => {
+
+        }
+    }
+
+    file.flush()?;
+
+    Ok(())
+}
+
+fn get_channel_mask(mapping: &Vec<(u8, SpeakerPos)>) -> u32 {
+    let mut mask_num: u32 = 0;
+    for (_, pos) in mapping {
+        mask_num |= *pos as u32;
+    }
+
+    mask_num
+}
 
 pub fn read_data_interleaved_unchecked<T: Read>(
     f: &mut BufReader<T>,
