@@ -1,5 +1,5 @@
 
-
+#[derive(Clone)]
 pub struct FIRFilter {
     degree: usize,
     coefficients: Vec<f32>,

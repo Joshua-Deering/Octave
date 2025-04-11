@@ -542,6 +542,18 @@ export component MainUi {
         }
     }
 
+    function fmt_size(size: int) -> string {
+        if (size < 1000) {
+            return size + " B";
+        } else if (size < 1000000) {
+            return round((size / 1000) * 100) / 100 + " KB";
+        } else if (size < 1000000000) {
+            return round((size / 1000000) * 100) / 100 + " MB";
+        } else {
+            return round((size / 1000000000) * 100) / 100 + " GB";
+        }
+    }
+
     if (cur_menu == 3): Rectangle {
         init => {
             root.f_analyzer_selected_file = "";
@@ -668,7 +680,7 @@ export component MainUi {
                                 }
 
                                 Text {
-                                    text: "Data Block Size: " + root.cur_f_results.data_block_size + " bytes";
+                                    text: "Data Block Size: " + fmt_size(root.cur_f_results.data_block_size);
                                     font-size: 14px;
                                     color: Palette.textcol;
                                 }
@@ -680,7 +692,7 @@ export component MainUi {
                                 }
 
                                 Text {
-                                    text: "File Size: " + root.cur_f_results.file-size + " bytes";
+                                    text: "File Size: " + fmt_size(root.cur_f_results.file-size);
                                     font-size: 14px;
                                     color: Palette.textcol;
                                 }

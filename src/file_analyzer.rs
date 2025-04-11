@@ -1,11 +1,10 @@
-use std::{fs::File, io::BufReader};
+use std::{thread, sync::Arc, fs::File, io::BufReader};
 
 use crate::circular_buffer::CircularBuffer;
 use crate::file_io::{read_data, read_wav_meta, WavInfo};
 use crate::fir_filter::FIRFilter;
 use crate::parametric_eq::{EqNode, FilterType, ParametricEq, Biquad};
 use crate::fir_filter_constants::*;
-use crate::util::compare_signals;
 
 #[derive(Debug)]
 pub struct FileResults {
@@ -30,11 +29,11 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
         None => return None,
     };
 
-    let (lkfs_i, lkfs_m, lkfs_s) = calculate_file_loudness(&samples, &metadata);
     let true_peaks = match calculate_true_peak(&samples, &metadata) {
         Some(d) => d,
         None => vec![]
     };
+    let (lkfs_i, lkfs_m, lkfs_s) = calculate_file_loudness(&samples, &metadata);
 
     Some(
         FileResults {
@@ -50,11 +49,11 @@ pub fn analyze_file(path: String) -> Option<FileResults> {
 
 pub fn calculate_true_peak(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> Option<Vec<f32>> {
     // first upsample to 192kHz
-    let upsampled = upsample(samples, metadata.sample_rate);
+    let upsampled = upsample(samples.clone(), metadata.sample_rate);
 
     // now find highest absolute magnitude(s)
     let mut ch_maxes = vec![];
-    for c in 0..samples.len() {
+    for c in 0..upsampled.len() {
         let mut ch_max = 0.;
         for s in &upsampled[c] {
             if s.abs() > ch_max {
@@ -178,7 +177,7 @@ fn calculate_file_loudness(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> (f64,
 }
 
 // helpers for calculate_true_peak
-fn upsample(samples: &Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
+fn upsample(samples: Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
     //FIR Filters
     let mut upsampling_filters = vec![];
 
@@ -203,27 +202,40 @@ fn upsample(samples: &Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
         }
     }
 
-    let mut upsampled = Vec::with_capacity(samples.len());
-    for c in 0..samples.len() {
-        let mut circ_buffer = CircularBuffer::new(FIR_UPSAMPLING_DEG);
-        for i in 0..FIR_UPSAMPLING_DEG {
-            circ_buffer.append(samples[c][i]);
-        }
+    let channels = samples.len();
 
-        let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples[c].len() * upsampling_filters.len());
-        for i in 0..samples[c].len() {
-            
-            circ_buffer.append(samples[c][i]);
-            let history = circ_buffer.get_ordered();
+    let samples_arc = Arc::new(samples);
+    let filters_arc = Arc::new(upsampling_filters);
 
-            for filter in upsampling_filters.iter() {
-                upsampled_ch.push(filter.process(&history));
+    let mut handles = Vec::with_capacity(channels);
+    for c in 0..channels {
+        let samples_clone = Arc::clone(&samples_arc);
+        let filters_clone = Arc::clone(&filters_arc);
+        let handle = thread::spawn(move || {
+            let mut circ_buffer = CircularBuffer::new(FIR_UPSAMPLING_DEG);
+            for i in 0..FIR_UPSAMPLING_DEG {
+                circ_buffer.append(samples_clone[c][i]);
             }
-        }
-        upsampled.push(upsampled_ch);
+
+            let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples_clone[c].len() * filters_clone.len());
+            for i in 0..samples_clone[c].len() {
+                
+                circ_buffer.append(samples_clone[c][i]);
+                let history = circ_buffer.get_ordered();
+
+                for filter in filters_clone.iter() {
+                    upsampled_ch.push(filter.process(&history));
+                }
+            }
+            return upsampled_ch;
+        });
+        handles.push(handle);
     }
 
-    compare_signals(samples, sample_rate, &upsampled, 192000);
+    let mut upsampled = Vec::with_capacity(channels);
+    for h in handles {
+        upsampled.push(h.join().unwrap());
+    }
 
     upsampled
 }
