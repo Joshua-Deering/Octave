@@ -38,7 +38,6 @@ impl CircularBuffer {
 
         self.pos += e.len();
         self.pos %= self.buffer_size;
-
     }
 
     pub fn get_ordered(&self) -> Vec<f32> {
@@ -53,5 +52,9 @@ impl CircularBuffer {
         right.copy_from_slice(&self.buffer[0..self.pos]);
         
         out
+    }
+
+    pub fn get_ordered_slices(&self) -> (&[f32], &[f32]) {
+        (&self.buffer[self.pos..], &self.buffer[0..self.pos])
     }
 }

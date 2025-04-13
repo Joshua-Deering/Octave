@@ -177,7 +177,7 @@ fn calculate_file_loudness(samples: &Vec<Vec<f32>>, metadata: &WavInfo) -> (f64,
 }
 
 // helpers for calculate_true_peak
-fn upsample(samples: Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
+pub fn upsample(samples: Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
     //FIR Filters
     let mut upsampling_filters = vec![];
 
@@ -221,10 +221,10 @@ fn upsample(samples: Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
             for i in 0..samples_clone[c].len() {
                 
                 circ_buffer.append(samples_clone[c][i]);
-                let history = circ_buffer.get_ordered();
+                let history = circ_buffer.get_ordered_slices();
 
                 for filter in filters_clone.iter() {
-                    upsampled_ch.push(filter.process(&history));
+                    upsampled_ch.push(filter.process_slices(history.0, history.1));
                 }
             }
             return upsampled_ch;

@@ -100,7 +100,7 @@ impl From<u32> for SpeakerPos {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct WavInfo {
     pub sample_type: u8,
     pub sample_type_str: String,
