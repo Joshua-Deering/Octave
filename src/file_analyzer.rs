@@ -1,6 +1,5 @@
 use std::{thread, sync::Arc, fs::File, io::BufReader};
 
-use crate::circular_buffer::CircularBuffer;
 use crate::file_io::{read_data, read_wav_meta, WavInfo};
 use crate::fir_filter::FIRFilter;
 use crate::parametric_eq::{EqNode, FilterType, ParametricEq, Biquad};
@@ -212,19 +211,11 @@ pub fn upsample(samples: Vec<Vec<f32>>, sample_rate: u32) -> Vec<Vec<f32>> {
         let samples_clone = Arc::clone(&samples_arc);
         let filters_clone = Arc::clone(&filters_arc);
         let handle = thread::spawn(move || {
-            let mut circ_buffer = CircularBuffer::new(FIR_UPSAMPLING_DEG);
-            for i in 0..FIR_UPSAMPLING_DEG {
-                circ_buffer.append(samples_clone[c][i]);
-            }
-
             let mut upsampled_ch: Vec<f32> = Vec::with_capacity(samples_clone[c].len() * filters_clone.len());
-            for i in 0..samples_clone[c].len() {
-                
-                circ_buffer.append(samples_clone[c][i]);
-                let history = circ_buffer.get_ordered_slices();
 
+            for i in FIR_UPSAMPLING_DEG..(samples_clone[c].len() - FIR_UPSAMPLING_DEG) {
                 for filter in filters_clone.iter() {
-                    upsampled_ch.push(filter.process_slices(history.0, history.1));
+                    upsampled_ch.push(filter.process(&samples_clone[c][i..(i+FIR_UPSAMPLING_DEG)]));
                 }
             }
             return upsampled_ch;
