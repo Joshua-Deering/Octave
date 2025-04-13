@@ -180,6 +180,8 @@ impl FilePlayer {
 impl Play for FilePlayer {
     fn next_chunk(&mut self, data: &mut Data) {
         if self.paused {
+            let dat_slice = data.as_slice_mut().unwrap();
+            dat_slice.fill(0f32);
             return;
         }
         if self.finished {
