@@ -1,28 +1,19 @@
-mod audio;
-mod circular_buffer;
-mod fft;
-mod file_analyzer;
-mod file_io;
-mod fir_filter;
-mod fir_filter_constants;
 mod img_generator;
-mod lookup_tables;
-mod parametric_eq;
 mod players;
 mod rta;
-mod util;
 
-use audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
-use file_analyzer::analyze_file;
-use file_io::{read_data, read_wav_meta, read_wav_sample_rate};
+use octave::audio::{do_short_time_fourier_transform, ShortTimeDftData, WindowFunction};
+use octave::file_analyzer::analyze_file;
+use octave::file_io::{read_data, read_wav_meta, read_wav_sample_rate};
 use img_generator::{
     generate_eq_fill_response, generate_eq_response, generate_rta_line, generate_spectrogram_img,
     generate_waveform_img, generate_waveform_preview,
 };
-use parametric_eq::{FilterType, ParametricEq};
-use players::AudioPlayer;
-use rta::ExternalRta;
-use util::*;
+use octave::parametric_eq::{FilterType, ParametricEq};
+use octave::util::*;
+
+use crate::players::AudioPlayer;
+use crate::rta::ExternalRta;
 
 use cpal::{
     traits::{DeviceTrait, HostTrait},

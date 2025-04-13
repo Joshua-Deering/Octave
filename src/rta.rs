@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use cpal::{default_host, traits::{DeviceTrait, HostTrait, StreamTrait}, InputCallbackInfo, SampleRate, Stream, SupportedStreamConfigRange};
 
-use crate::{circular_buffer::CircularBuffer, fft::Fft};
-use crate::audio::{FreqData, WindowFunction};
+use octave::{circular_buffer::CircularBuffer, fft::Fft};
+use octave::audio::{FreqData, WindowFunction};
 
 pub struct RTA {
     cached_samples: CircularBuffer,

@@ -3,7 +3,7 @@ use std::{fs::File, io::BufReader, u32};
 //use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Rgba8Pixel, SharedPixelBuffer, SharedString};
 
-use crate::{audio::{FreqData, ShortTimeDftData}, file_io::{read_data, read_wav_meta}, util::hue_to_rgb, ParametricEq};
+use octave::{audio::{FreqData, ShortTimeDftData}, file_io::{read_data, read_wav_meta}, util::hue_to_rgb, parametric_eq::ParametricEq};
 
 pub fn generate_waveform_preview(audio_file: SharedString, imgx: f32, imgy: f32) -> SharedPixelBuffer<Rgba8Pixel> {
     if audio_file.trim().is_empty() {

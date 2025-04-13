@@ -4,8 +4,8 @@ use std::fs::File;
 use std::io::{BufReader, Seek, SeekFrom};
 use std::sync::{Mutex, Arc};
 
-use crate::file_io::{read_data_interleaved_unchecked, read_wav_meta, WavInfo};
-use crate::parametric_eq::ParametricEq;
+use octave::file_io::{read_data_interleaved_unchecked, read_wav_meta, WavInfo};
+use octave::parametric_eq::ParametricEq;
 //use crate::audio::{WindowFunction, ShortTimeDftData, do_short_time_fourier_transform};
 
 pub struct AudioPlayer {
