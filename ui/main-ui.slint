@@ -39,6 +39,7 @@ export component MainUi {
     pure callback set_eq(nodes: [NodeData]);
     pure callback request_eq_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
     pure callback request_eq_fill_response(nodes: [NodeData], min_freq: float, max_freq: float, min_gain: float, max_gain: float, imgx: length, imgy: length) -> string;
+    pure callback req_player_rta_img(imgx: length, imgy: length, min_freq: float, max_freq: float, min_gain: float, max_gain: float) -> string;
 
     in property <int> cur_menu;
     
@@ -53,6 +54,7 @@ export component MainUi {
     property <length> imgx: root.width;
     property <length> imgy: 100px;
     in property <image> waveform_img;
+    property <string> player_rta_line_src;
 
     pure function format_time(seconds: float) -> string {
         return floor(seconds / 60) + ":" + (floor(Math.mod(seconds, 60)) < 10 ? "0" : "") + floor(Math.mod(seconds, 60));
@@ -129,6 +131,29 @@ export component MainUi {
                 set_eq(nodes) => {
                     root.set_eq(nodes);
                 }
+            }
+            Timer {
+                interval: 125ms;
+                running: root.is_playing;
+                triggered => {
+                    root.player_rta_line_src = root.req_player_rta_img(parent.width - 10px, parent.height * 0.8 - 10px, param_eq.min_freq, param_eq.max_freq, -50.0, 10);
+                }
+            }
+            Path {
+                x: 5px;
+                y: 5px;
+                width: (parent.width - 10px);
+                height: (parent.height * 0.8 - 10px);
+
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: (parent.width - 10px) / 1px;
+                viewbox-height: (parent.height * 0.8 - 10px) / 1px;
+
+                commands: root.player_rta_line_src;
+                stroke-width: 1.5px;
+                stroke: Palette.accent2;
+                fill: Palette.accent2.transparentize(60%);
             }
         }
         Rectangle {

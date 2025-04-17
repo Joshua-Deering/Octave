@@ -31,11 +31,11 @@ impl RTA {
 pub struct ExternalRta {
     stream: Stream,
     rta: Arc<Mutex<RTA>>,
-    pub cache_size: usize,
+    pub buffer_size: usize,
 }
 
 impl ExternalRta {
-    pub fn new(cache_size: usize) -> Self {
+    pub fn new(buffer_size: usize) -> Self {
 
         let host = default_host();
         let device = host.default_input_device().expect("No input device available!");
@@ -56,7 +56,7 @@ impl ExternalRta {
 
         let config = config_opt.unwrap();
 
-        let rta = Arc::new(Mutex::new(RTA::new(cache_size, config.sample_rate.0)));
+        let rta = Arc::new(Mutex::new(RTA::new(buffer_size, config.sample_rate.0)));
         
         let rta_copy = Arc::clone(&rta);
         let stream = device.build_input_stream(
@@ -74,7 +74,7 @@ impl ExternalRta {
         Self {
             stream,
             rta,
-            cache_size,
+            buffer_size,
         }
     }
 

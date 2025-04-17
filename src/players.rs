@@ -1,15 +1,19 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Stream, Data, Host, OutputCallbackInfo, SampleFormat, SampleRate};
+
 use std::fs::File;
 use std::io::{BufReader, Seek, SeekFrom};
 use std::sync::{Mutex, Arc};
 
 use octave::file_io::{read_data_interleaved_unchecked, read_wav_meta, WavInfo};
 use octave::parametric_eq::ParametricEq;
-//use crate::audio::{WindowFunction, ShortTimeDftData, do_short_time_fourier_transform};
+use octave::audio::FreqData;
+
+use crate::rta::RTA;
 
 pub struct AudioPlayer {
     internal_player: Arc<Mutex<FilePlayer>>,
+    internal_rta: Arc<Mutex<RTA>>,
     pub playing: bool,
     pub duration: f32,
 
@@ -27,6 +31,8 @@ impl AudioPlayer {
         internal_player.lock().unwrap().paused = true;
 
         let sample_rate = meta.sample_rate;
+
+        let internal_rta = Arc::new(Mutex::new(RTA::new(2usize.pow(13), sample_rate)));
         
         let host: Host = cpal::default_host();
         let device = host.default_output_device().expect("No audio device available!");
@@ -40,13 +46,18 @@ impl AudioPlayer {
 
         let stream_player_copy = Arc::clone(&internal_player);
         let eq_copy = Arc::clone(&parametric_eq);
+        let rta_copy = Arc::clone(&internal_rta);
         let stream = device
             .build_output_stream_raw(
                 &config,
                 SampleFormat::F32,
                 move |data: &mut Data, _: &OutputCallbackInfo| {
+                    // add samples to data buffer
                     stream_player_copy.lock().unwrap().next_chunk(data);
+                    // eq samples
                     eq_copy.lock().unwrap().process(data.as_slice_mut().unwrap());
+                    // send eq'd samples to rta
+                    rta_copy.lock().unwrap().update(data.as_slice().unwrap());
                 },
                 move |err| {
                     panic!("{}", err)
@@ -57,6 +68,7 @@ impl AudioPlayer {
 
         Self {
             internal_player,
+            internal_rta,
             playing: false,
             duration: meta.audio_duration,
             stream
@@ -71,6 +83,10 @@ impl AudioPlayer {
     pub fn pause(&mut self) {
         self.internal_player.lock().unwrap().paused = true;
         self.playing = false;
+    }
+
+    pub fn get_rta_fft(&self) -> Vec<FreqData> {
+        self.internal_rta.lock().unwrap().get_fft()
     }
 
     pub fn set_progress(&mut self, prog: f32) {

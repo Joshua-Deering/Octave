@@ -30,6 +30,8 @@ export component ParametricEq {
     out property <float> max_freq: 20000;
     out property <float> min_gain: -15;
     out property <float> max_gain: 15;
+    property <float> min_lvl: -50.0;
+    property <float> max_lvl: 10.0;
     property <float> min_q: 0.1;
     property <float> max_q: 100.0;
 
@@ -59,6 +61,7 @@ export component ParametricEq {
     property <[float]> key_freqs: [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
     property <[float]> minor_freqs: [30, 40, 60, 70, 80, 90, 300, 400, 600, 700, 800, 900, 3000, 4000, 6000, 7000, 8000, 9000, 15000];
     property <[float]> key_gains: [-10, -5, 0, 5, 10];
+    property <[float]> key_lvls: [-40.0, -30.0, -20.0, -10.0, 0.0];
 
     function set_eq_and_draw() {
         root.set_eq(root.eq_nodes);
@@ -109,6 +112,12 @@ export component ParametricEq {
                 right_axis_max: root.max_gain;
                 right_axis_is_centered: true;
                 right_axis_label: "Gain (dB)";
+
+                left_axis_key_points: root.key_lvls;
+                left_axis_min: root.min_lvl;
+                left_axis_max: root.max_lvl;
+                left_axis_is_centered: false;
+                left_axis_label: "Level (dBFS)";
                 
                 major_line_color: Palette.secondary.transparentize(30%);
                 minor_line_color: Palette.secondary.transparentize(70%);

@@ -63,8 +63,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let player: Rc<RefCell<Option<AudioPlayer>>> = Rc::new(RefCell::new(None));
     let player_eq = Arc::new(Mutex::new(ParametricEq::new(vec![], 48000)));
-    // TODO: implement this
-    //let _player_rta: Arc<Mutex<Option<RTA>>> = Arc::new(Mutex::new(None));
 
     let rta: Rc<RefCell<Option<ExternalRta>>> = Rc::new(RefCell::new(None));
 
@@ -314,6 +312,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
+    {
+        let player_clone = Rc::clone(&player);
+        main_window.on_req_player_rta_img(
+            move |imgx: f32,
+                  imgy: f32,
+                  min_freq: f32,
+                  max_freq: f32,
+                  min_level: f32,
+                  max_level: f32| {
+                if let Some(ref active_player) = *player_clone.borrow() {
+                    let fft = active_player.get_rta_fft();
+
+                    generate_rta_line(
+                        imgx as u32,
+                        imgy as u32,
+                        min_freq,
+                        max_freq,
+                        min_level,
+                        max_level,
+                        1./8.,
+                        fft,
+                    )
+                } else {
+                    //if no active player, return empty image
+                    SharedString::new()
+                }
+            },
+        );
+    }
+
     // On Audio file select ----------------------------------------------------
     {
         let audio_player_ref = Rc::clone(&player);
@@ -431,7 +459,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut new_rta = false;
 
             if let Some(active_rta) = rta.as_mut() {
-                if active_rta.cache_size != new_cache_size {
+                if active_rta.buffer_size != new_cache_size {
                     new_rta = true;
                 } else {
                     active_rta.start();
