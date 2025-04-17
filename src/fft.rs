@@ -1,5 +1,4 @@
 use std::{f32::consts::{PI, TAU}, num::NonZero, ops::{Add, AddAssign, Div, Mul, MulAssign, Sub}, thread};
-use fastapprox::fast;
 
 use crate::audio::{FreqData, WindowFunction};
 
@@ -196,7 +195,7 @@ impl NaiveDft {
                         for i in 0..self.buffer_size {
                             let mut angle = (i as f32/self.buffer_size as f32) * TAU * f as f32;
                             angle = ((angle + PI) % TAU) - PI;
-                            let test_pt = Complex::new(fast::cos(angle), fast::sin(angle));
+                            let test_pt = Complex::new(f32::cos(angle), f32::sin(angle));
                             sum += &test_pt * (buffer[i] * self.window_function[i]);
                         }
 

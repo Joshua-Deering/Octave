@@ -1,6 +1,5 @@
 use std::{fs::File, io::BufReader, u32};
 
-//use image::{Pixel, Rgb, RgbImage, RgbaImage, Rgba};
 use slint::{Rgba8Pixel, SharedPixelBuffer, SharedString};
 
 use octave::{audio::{FreqData, ShortTimeDftData}, file_io::{read_data, read_wav_meta}, util::hue_to_rgb, parametric_eq::ParametricEq};
