@@ -78,16 +78,18 @@ pub fn generate_rta_line(
     let mut last_fft_i = 0;
     while low_bound < max_freq {
         let mut bin_sum = 0.;
+        let mut bin_total = 0;
         let upper_bound = low_bound * band_multiplier;
 
         while fft_i < fft.len() && fft[fft_i].frequency < upper_bound  {
             bin_sum += fft[fft_i].amplitude;
+            bin_total += 1;
             fft_i += 1;
         }
         if fft_i == last_fft_i {
             bins.push(bins[bins.len()-1]);
         } else {
-            bins.push(((low_bound + upper_bound) / 2., 20. * bin_sum.log10()));
+            bins.push(((low_bound + upper_bound) / 2., 20. * (bin_sum / bin_total as f32).log10()));
         }
 
         low_bound *= band_multiplier;

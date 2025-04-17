@@ -32,7 +32,7 @@ impl AudioPlayer {
 
         let sample_rate = meta.sample_rate;
 
-        let internal_rta = Arc::new(Mutex::new(RTA::new(2usize.pow(13), sample_rate)));
+        let internal_rta = Arc::new(Mutex::new(RTA::new(2usize.pow(14), sample_rate)));
         
         let host: Host = cpal::default_host();
         let device = host.default_output_device().expect("No audio device available!");
@@ -56,8 +56,17 @@ impl AudioPlayer {
                     stream_player_copy.lock().unwrap().next_chunk(data);
                     // eq samples
                     eq_copy.lock().unwrap().process(data.as_slice_mut().unwrap());
-                    // send eq'd samples to rta
-                    rta_copy.lock().unwrap().update(data.as_slice().unwrap());
+
+                    // avoid blocking audio thread, missing a data chunk
+                    // here and there wont really affect the rta visually
+                    if let Ok(mut rta) = rta_copy.try_lock() {
+                        //avg the L/R channels
+                        let mut lr_avg = Vec::with_capacity(data.len() / 2);
+                        for c in data.as_slice::<f32>().unwrap().chunks_exact(2) {
+                            lr_avg.push((c[0] + c[1]) * 0.5);
+                        }
+                        rta.update(lr_avg.as_slice());
+                    }
                 },
                 move |err| {
                     panic!("{}", err)
